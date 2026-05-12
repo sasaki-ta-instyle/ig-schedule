@@ -647,7 +647,7 @@ function TaskRow({
             title="上へ"
             style={moveBtnStyle}
           >
-            ▲
+            ↑
           </button>
           <button
             type="button"
@@ -656,7 +656,7 @@ function TaskRow({
             title="下へ"
             style={moveBtnStyle}
           >
-            ▼
+            ↓
           </button>
           {onShiftNext && (
             <button
