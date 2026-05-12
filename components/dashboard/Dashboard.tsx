@@ -124,7 +124,10 @@ export function Dashboard() {
   }
 
   return (
-    <section className="glass-panel" style={{ padding: 24 }}>
+    <section
+      className="glass-panel allow-sticky"
+      style={{ padding: 24 }}
+    >
       <header
         style={{
           display: "flex",
@@ -170,7 +173,7 @@ export function Dashboard() {
           メンバーが未登録です。<code>pnpm seed</code> を実行してください。
         </p>
       ) : (
-        <div className="scroll-x">
+        <div>
           <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%" }}>
             <thead>
               <tr>

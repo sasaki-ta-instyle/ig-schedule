@@ -106,7 +106,14 @@ main, header, footer, section, .page-wrap { position: relative; z-index: 1; }
   corner-shape: var(--corner-shape-hard);
   padding: 32px;
   position: relative;
-  overflow: hidden;
+  /* overflow: clip にして子の sticky を viewport まで通す
+     (clip はスクロールコンテナを作らないため hidden と違って親方向の sticky を阻害しない) */
+  overflow: clip;
+}
+
+/* sticky を使う panel では clip すら避けて完全に visible にする */
+.glass-panel.allow-sticky {
+  overflow: visible;
 }
 .glass-panel::before {
   content: '';
