@@ -44,6 +44,8 @@
 
   --ease-out: 250ms cubic-bezier(.4,0,.2,1);
   --ease-spring: 380ms cubic-bezier(.34,1.56,.64,1);
+
+  --header-h: 74px;
 }
 
 * { corner-shape: var(--corner-shape); }

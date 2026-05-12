@@ -178,11 +178,14 @@ export function Dashboard() {
                   style={{
                     position: "sticky",
                     left: 0,
-                    background: "transparent",
+                    top: "var(--header-h)",
+                    background: "rgba(237, 233, 224, 0.86)",
+                    backdropFilter: "saturate(180%) blur(16px)",
+                    WebkitBackdropFilter: "saturate(180%) blur(16px)",
                     width: 110,
                     padding: 0,
                     border: "none",
-                    zIndex: 2,
+                    zIndex: 4,
                   }}
                   aria-hidden="true"
                 ></th>
@@ -192,9 +195,16 @@ export function Dashboard() {
                     <th
                       key={w}
                       style={{
+                        position: "sticky",
+                        top: "var(--header-h)",
+                        background: "rgba(237, 233, 224, 0.86)",
+                        backdropFilter: "saturate(180%) blur(16px)",
+                        WebkitBackdropFilter: "saturate(180%) blur(16px)",
                         minWidth: 200,
                         padding: "6px 8px",
                         textAlign: "left",
+                        zIndex: 3,
+                        borderRadius: "var(--r-sm)",
                       }}
                     >
                       <div
