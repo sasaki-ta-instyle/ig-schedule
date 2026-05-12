@@ -123,6 +123,68 @@ export function Dashboard() {
     mutate(tasksKey);
   }
 
+  async function shiftToNextWeek(task: Task) {
+    const nextWeek = addWeeks(task.weekIso, 1);
+    // 楽観的更新
+    mutate(
+      tasksKey,
+      (prev: Task[] = []) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, weekIso: nextWeek } : t,
+        ),
+      { revalidate: false },
+    );
+    try {
+      await postJson(
+        `/api/tasks/${task.id}`,
+        { weekIso: nextWeek },
+        "PATCH",
+      );
+    } catch (e) {
+      console.error("shift failed", e);
+    }
+    mutate(tasksKey);
+    mutate(workloadKey);
+  }
+
+  async function shiftAllUnfinishedToNextWeek(cellTasks: Task[]) {
+    const undone = cellTasks.filter((t) => !t.done);
+    if (undone.length === 0) return;
+    if (
+      !confirm(
+        `未完了の ${undone.length} 件を翌週へ移動します。よろしいですか？`,
+      )
+    )
+      return;
+    // 楽観的更新
+    const idMap = new Map(
+      undone.map((t) => [t.id, addWeeks(t.weekIso, 1)] as const),
+    );
+    mutate(
+      tasksKey,
+      (prev: Task[] = []) =>
+        prev.map((t) =>
+          idMap.has(t.id) ? { ...t, weekIso: idMap.get(t.id)! } : t,
+        ),
+      { revalidate: false },
+    );
+    try {
+      await Promise.all(
+        undone.map((t) =>
+          postJson(
+            `/api/tasks/${t.id}`,
+            { weekIso: addWeeks(t.weekIso, 1) },
+            "PATCH",
+          ),
+        ),
+      );
+    } catch (e) {
+      console.error("bulk shift failed", e);
+    }
+    mutate(tasksKey);
+    mutate(workloadKey);
+  }
+
   async function reorderInCell(
     cellTasks: Task[],
     index: number,
@@ -365,9 +427,38 @@ export function Dashboard() {
                               onMoveDown={() =>
                                 reorderInCell(cellTasks, idx, 1)
                               }
+                              onShiftNext={
+                                !t.done ? () => shiftToNextWeek(t) : undefined
+                              }
                             />
                           ))}
                         </ul>
+                        {isEdit &&
+                          cellTasks.some((t) => !t.done) &&
+                          cellTasks.length > 0 && (
+                            <button
+                              type="button"
+                              className="edit-only"
+                              onClick={() =>
+                                shiftAllUnfinishedToNextWeek(cellTasks)
+                              }
+                              style={{
+                                marginTop: 6,
+                                fontSize: ".6875rem",
+                                color: "var(--color-text-muted)",
+                                background: "rgba(255,255,255,.42)",
+                                border: "1px dashed rgba(255,255,255,.62)",
+                                borderRadius: 6,
+                                padding: "3px 8px",
+                                cursor: "pointer",
+                                width: "100%",
+                                textAlign: "left",
+                              }}
+                              title="このセルの未完了タスクをすべて翌週に移す"
+                            >
+                              未完了を翌週へ →
+                            </button>
+                          )}
                         {isEdit && (projects?.length ?? 0) > 0 && (
                           <QuickAdd
                             projects={projects ?? []}
@@ -487,6 +578,7 @@ function TaskRow({
   canMoveDown,
   onMoveUp,
   onMoveDown,
+  onShiftNext,
 }: {
   task: Task;
   project: Project | undefined;
@@ -496,6 +588,7 @@ function TaskRow({
   canMoveDown?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onShiftNext?: () => void;
 }) {
   return (
     <li
@@ -537,34 +630,48 @@ function TaskRow({
           {task.title}
         </span>
       </div>
-      {isEdit && (onMoveUp || onMoveDown) && (
+      {isEdit && (onMoveUp || onMoveDown || onShiftNext) && (
         <div
           className="edit-only"
           style={{
             display: "flex",
-            flexDirection: "column",
-            gap: 1,
+            alignItems: "center",
+            gap: 2,
             flexShrink: 0,
           }}
         >
-          <button
-            type="button"
-            onClick={onMoveUp}
-            disabled={!canMoveUp}
-            title="上へ"
-            style={moveBtnStyle}
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 1 }}
           >
-            ▲
-          </button>
-          <button
-            type="button"
-            onClick={onMoveDown}
-            disabled={!canMoveDown}
-            title="下へ"
-            style={moveBtnStyle}
-          >
-            ▼
-          </button>
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={!canMoveUp}
+              title="上へ"
+              style={moveBtnStyle}
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={!canMoveDown}
+              title="下へ"
+              style={moveBtnStyle}
+            >
+              ▼
+            </button>
+          </div>
+          {onShiftNext && (
+            <button
+              type="button"
+              onClick={onShiftNext}
+              title="翌週へ移動"
+              style={{ ...moveBtnStyle, padding: "4px 6px" }}
+            >
+              →
+            </button>
+          )}
         </div>
       )}
     </li>
