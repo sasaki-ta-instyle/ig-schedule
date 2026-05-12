@@ -375,10 +375,11 @@ function WeekPicker({
       value={weekIso}
       onChange={(e) => onChange(e.target.value)}
       style={{ fontSize: ".75rem", padding: "4px 8px" }}
+      title={weekIso}
     >
       {all.map((w) => (
         <option key={w} value={w}>
-          {w} ({weekIsoLabel(w)})
+          {weekIsoLabel(w)}
         </option>
       ))}
     </select>
@@ -452,10 +453,11 @@ function NewTaskInline({
         value={weekIso}
         onChange={(e) => setWeekIso(e.target.value)}
         style={{ width: 110, fontSize: ".75rem" }}
+        title={weekIso}
       >
         {weeks.map((w) => (
           <option key={w} value={w}>
-            {w}
+            {weekIsoLabel(w)}
           </option>
         ))}
       </select>

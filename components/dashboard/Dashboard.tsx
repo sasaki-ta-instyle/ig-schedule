@@ -217,13 +217,13 @@ export function Dashboard() {
                           gap: 2,
                         }}
                       >
-                        <span className="t-small mono muted">{w}</span>
                         <span
                           style={{
                             fontSize: ".8125rem",
                             fontWeight: 600,
                             color: "var(--color-text)",
                           }}
+                          title={w}
                         >
                           {weekIsoLabel(w)}
                         </span>

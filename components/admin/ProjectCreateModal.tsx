@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { postJson } from "@/lib/api";
-import { weekIsoLabel } from "@/lib/week";
+import {
+  addWeeks,
+  currentWeekIso,
+  weekIsoLabel,
+  weekIsoRange,
+} from "@/lib/week";
 
 type Member = { id: number; name: string; color: string };
 
@@ -48,6 +53,15 @@ export function ProjectCreateModal({
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const weekOptions = useMemo(() => {
+    const start = addWeeks(currentWeekIso(), -2);
+    const base = weekIsoRange(start, 26);
+    const extras = drafts
+      .map((d) => d.weekIso)
+      .filter((w): w is string => Boolean(w) && !base.includes(w));
+    return [...new Set([...base, ...extras])].sort();
+  }, [drafts]);
 
   function togglePlannedMember(id: number) {
     setPlannedMemberIds((prev) =>
@@ -367,14 +381,22 @@ export function ProjectCreateModal({
                     onChange={(e) => updateDraft(i, { title: e.target.value })}
                     style={{ fontSize: ".8125rem" }}
                   />
-                  <input
+                  <select
                     className="input"
                     value={d.weekIso}
-                    onChange={(e) => updateDraft(i, { weekIso: e.target.value })}
-                    placeholder="2026-W20"
-                    title={d.weekIso ? weekIsoLabel(d.weekIso) : ""}
+                    onChange={(e) =>
+                      updateDraft(i, { weekIso: e.target.value })
+                    }
+                    title={d.weekIso}
                     style={{ fontSize: ".75rem" }}
-                  />
+                  >
+                    {!d.weekIso && <option value="">週を選択</option>}
+                    {weekOptions.map((w) => (
+                      <option key={w} value={w}>
+                        {weekIsoLabel(w)}
+                      </option>
+                    ))}
+                  </select>
                   <select
                     className="input"
                     value={d.assigneeMemberId ?? ""}
