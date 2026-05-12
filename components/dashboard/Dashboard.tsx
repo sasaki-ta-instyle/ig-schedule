@@ -123,21 +123,20 @@ export function Dashboard() {
     mutate(tasksKey);
   }
 
-  async function shiftToNextWeek(task: Task) {
-    const nextWeek = addWeeks(task.weekIso, 1);
-    // 楽観的更新
+  async function shiftWeek(task: Task, delta: -1 | 1) {
+    const targetWeek = addWeeks(task.weekIso, delta);
     mutate(
       tasksKey,
       (prev: Task[] = []) =>
         prev.map((t) =>
-          t.id === task.id ? { ...t, weekIso: nextWeek } : t,
+          t.id === task.id ? { ...t, weekIso: targetWeek } : t,
         ),
       { revalidate: false },
     );
     try {
       await postJson(
         `/api/tasks/${task.id}`,
-        { weekIso: nextWeek },
+        { weekIso: targetWeek },
         "PATCH",
       );
     } catch (e) {
@@ -427,9 +426,8 @@ export function Dashboard() {
                               onMoveDown={() =>
                                 reorderInCell(cellTasks, idx, 1)
                               }
-                              onShiftNext={
-                                !t.done ? () => shiftToNextWeek(t) : undefined
-                              }
+                              onShiftPrev={() => shiftWeek(t, -1)}
+                              onShiftNext={() => shiftWeek(t, 1)}
                             />
                           ))}
                         </ul>
@@ -578,6 +576,7 @@ function TaskRow({
   canMoveDown,
   onMoveUp,
   onMoveDown,
+  onShiftPrev,
   onShiftNext,
 }: {
   task: Task;
@@ -588,6 +587,7 @@ function TaskRow({
   canMoveDown?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onShiftPrev?: () => void;
   onShiftNext?: () => void;
 }) {
   return (
@@ -630,7 +630,7 @@ function TaskRow({
           {task.title}
         </span>
       </div>
-      {isEdit && (onMoveUp || onMoveDown || onShiftNext) && (
+      {isEdit && (onMoveUp || onMoveDown || onShiftPrev || onShiftNext) && (
         <div
           className="edit-only"
           style={{
@@ -658,16 +658,28 @@ function TaskRow({
           >
             ↓
           </button>
-          {onShiftNext && (
-            <button
-              type="button"
-              onClick={onShiftNext}
-              title="翌週へ移動"
-              style={moveBtnStyle}
-            >
-              →
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 0 }}>
+            {onShiftPrev && (
+              <button
+                type="button"
+                onClick={onShiftPrev}
+                title="前週へ戻す"
+                style={moveBtnStyle}
+              >
+                ←
+              </button>
+            )}
+            {onShiftNext && (
+              <button
+                type="button"
+                onClick={onShiftNext}
+                title="翌週へ移動"
+                style={moveBtnStyle}
+              >
+                →
+              </button>
+            )}
+          </div>
         </div>
       )}
     </li>
