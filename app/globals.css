@@ -332,6 +332,20 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 .is-readonly .editable-only { pointer-events: none; opacity: 0.78; }
 .is-readonly .edit-only { display: none !important; }
 
+/* ── Dashboard grid zebra ── */
+.dash-grid tbody tr:nth-child(odd) > td.glass-cell,
+.dash-grid tbody tr:nth-child(odd) > th {
+  background: rgba(243, 241, 238, 0.55);
+}
+.dash-grid tbody tr:nth-child(even) > td.glass-cell,
+.dash-grid tbody tr:nth-child(even) > th {
+  background: rgba(196, 193, 176, 0.22);
+}
+.dash-grid tbody tr:nth-child(odd) > td.glass-cell:hover,
+.dash-grid tbody tr:nth-child(even) > td.glass-cell:hover {
+  background: rgba(255, 255, 255, 0.62);
+}
+
 /* ── Scrollbar ── */
 .scroll-x { overflow-x: auto; }
 .scroll-x::-webkit-scrollbar { height: 10px; }

@@ -171,7 +171,14 @@ export function Dashboard() {
         </p>
       ) : (
         <div className="scroll-x">
-          <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%" }}>
+          <table
+            className="dash-grid"
+            style={{
+              borderCollapse: "separate",
+              borderSpacing: 6,
+              width: "100%",
+            }}
+          >
             <thead>
               <tr>
                 <th
@@ -232,10 +239,10 @@ export function Dashboard() {
               {members.map((m) => (
                 <tr key={m.id}>
                   <th
+                    className="dash-member"
                     style={{
                       position: "sticky",
                       left: 0,
-                      background: "rgba(243,241,238,.78)",
                       backdropFilter: "blur(12px)",
                       padding: "10px",
                       textAlign: "left",
