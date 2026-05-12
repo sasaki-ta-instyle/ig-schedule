@@ -46,11 +46,15 @@ export async function DELETE(
   if (!Number.isFinite(projectId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
+  const deletedTasks = await db
+    .delete(schema.tasks)
+    .where(eq(schema.tasks.projectId, projectId))
+    .returning({ id: schema.tasks.id });
   const [row] = await db
     .update(schema.projects)
     .set({ archivedAt: new Date() })
     .where(eq(schema.projects.id, projectId))
     .returning();
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, deletedTaskCount: deletedTasks.length });
 }

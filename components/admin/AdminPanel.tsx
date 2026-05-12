@@ -39,9 +39,15 @@ export function AdminPanel() {
     mutate("/api/projects");
   }
   async function archiveProject(p: Project) {
-    if (!confirm(`「${p.name}」をアーカイブしますか？タスクは残ります。`)) return;
+    if (
+      !confirm(
+        `「${p.name}」をアーカイブします。\n関連するタスクも全て削除されます。よろしいですか？`,
+      )
+    )
+      return;
     await del(`/api/projects/${p.id}`);
     mutate("/api/projects");
+    mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
   }
 
   return (
