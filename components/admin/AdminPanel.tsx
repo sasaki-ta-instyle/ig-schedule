@@ -202,6 +202,11 @@ export function AdminPanel() {
           onCreated={() => {
             setShowCreate(false);
             mutate("/api/projects");
+            mutate(
+              (key) =>
+                typeof key === "string" &&
+                (key.startsWith("/api/tasks") || key.startsWith("/api/workload")),
+            );
           }}
         />
       )}

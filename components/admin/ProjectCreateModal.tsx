@@ -11,6 +11,7 @@ type DraftTask = {
   weekIso: string;
   assigneeMemberId: number | null;
   notes: string | null;
+  estimatedHours: number | null;
 };
 
 type GenerateResponse = {
@@ -120,6 +121,7 @@ export function ProjectCreateModal({
         weekIso: lastWeek ?? "",
         assigneeMemberId: plannedMemberIds[0] ?? null,
         notes: null,
+        estimatedHours: null,
       },
     ]);
   }
@@ -328,12 +330,30 @@ export function ProjectCreateModal({
                 gap: 6,
               }}
             >
+              <li
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 120px 120px 70px 24px",
+                  gap: 8,
+                  padding: "2px 8px",
+                  fontSize: ".6875rem",
+                  color: "var(--color-text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: ".06em",
+                }}
+              >
+                <span>タスク</span>
+                <span>週</span>
+                <span>担当</span>
+                <span>見積</span>
+                <span></span>
+              </li>
               {drafts.map((d, i) => (
                 <li
                   key={i}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 140px 140px auto",
+                    gridTemplateColumns: "1fr 120px 120px 70px 24px",
                     gap: 8,
                     alignItems: "center",
                     padding: 8,
@@ -376,10 +396,27 @@ export function ProjectCreateModal({
                         </option>
                       ))}
                   </select>
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    max={40}
+                    step={0.5}
+                    value={d.estimatedHours ?? ""}
+                    onChange={(e) =>
+                      updateDraft(i, {
+                        estimatedHours:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    placeholder="h"
+                    style={{ fontSize: ".75rem", padding: "4px 8px" }}
+                  />
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     onClick={() => deleteDraft(i)}
+                    style={{ padding: "2px 6px" }}
                   >
                     ×
                   </button>
