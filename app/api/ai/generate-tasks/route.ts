@@ -211,29 +211,33 @@ export async function POST(req: Request) {
   const toolUse = response.content.find((c) => c.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") {
     return NextResponse.json(
-      { error: "model did not return tool_use", raw: response },
+      { error: "model did not return tool_use" },
       { status: 502 },
     );
   }
   const raw = toolUse.input as {
-    tasks?: Array<{
-      title: string;
-      weekIso: string;
-      assigneeMemberId: number;
-      notes?: string;
-      estimatedHours?: number;
-    }>;
-    rationale?: string;
+    tasks?: unknown;
+    rationale?: unknown;
   };
+
+  const rawArr = Array.isArray(raw.tasks) ? raw.tasks : [];
+  const MAX_AI_TASKS = 30;
+  const capped = rawArr.slice(0, MAX_AI_TASKS) as Array<{
+    title?: unknown;
+    weekIso?: unknown;
+    assigneeMemberId?: unknown;
+    notes?: unknown;
+    estimatedHours?: unknown;
+  }>;
 
   const memberIdSet = new Set(plannedMemberIds);
   const weekSet = new Set(weeks);
-  const tasks = (raw.tasks ?? [])
+  const tasks = capped
     .map((t, i) => {
       const title = sanitizeText(t.title, TEXT_LIMITS.taskTitle);
       const assignee = Number(t.assigneeMemberId);
       if (!title) return null;
-      if (!weekSet.has(t.weekIso)) return null;
+      if (typeof t.weekIso !== "string" || !weekSet.has(t.weekIso)) return null;
       if (!memberIdSet.has(assignee)) return null;
       const notes =
         t.notes == null

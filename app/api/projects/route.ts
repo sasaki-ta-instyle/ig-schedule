@@ -60,8 +60,11 @@ export async function POST(req: Request) {
     ? (body.plannedMemberIds as number[])
     : [];
 
-  // タスク配列の事前検証
-  const incoming = Array.isArray(body.tasks) ? (body.tasks as IncomingTask[]) : [];
+  // タスク配列の事前検証（上限を厳格化）
+  const MAX_INCOMING_TASKS = 50;
+  const incoming = Array.isArray(body.tasks)
+    ? (body.tasks as IncomingTask[]).slice(0, MAX_INCOMING_TASKS)
+    : [];
   type CleanTask = {
     title: string;
     weekIso: string;

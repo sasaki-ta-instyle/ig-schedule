@@ -167,41 +167,58 @@ export function Dashboard() {
 
   async function shiftWeek(task: Task, delta: -1 | 1) {
     const targetWeek = addWeeks(task.weekIso, delta);
-    mutate(
-      tasksKey,
-      (prev: Task[] = []) =>
-        prev.map((t) =>
-          t.id === task.id ? { ...t, weekIso: targetWeek } : t,
-        ),
-      { revalidate: false },
-    );
     const hours = task.estimatedHours ? Number(task.estimatedHours) : 0;
-    if (task.assigneeMemberId && hours > 0) {
-      mutate(
-        workloadKey,
-        (prev: Workload[] = []) =>
-          applyWorkloadDelta(prev, [
-            {
-              memberId: task.assigneeMemberId!,
-              fromWeek: task.weekIso,
-              toWeek: targetWeek,
-              hours,
-            },
-          ]),
-        { revalidate: false },
-      );
-    }
+    const movesWorkload =
+      task.assigneeMemberId != null && hours > 0;
+
+    // tasks の楽観的更新: async fn 内で PATCH を完了させ、その後 revalidate を1回だけ走らせる
     try {
-      await postJson(
-        `/api/tasks/${task.id}`,
-        { weekIso: targetWeek },
-        "PATCH",
+      await mutate(
+        tasksKey,
+        async () => {
+          await postJson(
+            `/api/tasks/${task.id}`,
+            { weekIso: targetWeek },
+            "PATCH",
+          );
+          return undefined; // 終了後に再フェッチを走らせる
+        },
+        {
+          optimisticData: (prev: Task[] | undefined) =>
+            (prev ?? []).map((t) =>
+              t.id === task.id ? { ...t, weekIso: targetWeek } : t,
+            ),
+          rollbackOnError: true,
+          populateCache: false,
+          revalidate: true,
+        },
       );
     } catch (e) {
       console.error("shift failed", e);
     }
-    mutate(tasksKey);
-    mutate(workloadKey);
+    // workload も in-flight 中はクロッバーされないように optimisticData で更新
+    if (movesWorkload) {
+      mutate(
+        workloadKey,
+        async () => undefined,
+        {
+          optimisticData: (prev: Workload[] | undefined) =>
+            applyWorkloadDelta(prev ?? [], [
+              {
+                memberId: task.assigneeMemberId!,
+                fromWeek: task.weekIso,
+                toWeek: targetWeek,
+                hours,
+              },
+            ]),
+          rollbackOnError: true,
+          populateCache: false,
+          revalidate: true,
+        },
+      );
+    } else {
+      mutate(workloadKey);
+    }
   }
 
   async function shiftAllUnfinishedToNextWeek(cellTasks: Task[]) {
@@ -244,15 +261,13 @@ export function Dashboard() {
       );
     }
     try {
-      await Promise.all(
-        undone.map((t) =>
-          postJson(
-            `/api/tasks/${t.id}`,
-            { weekIso: addWeeks(t.weekIso, 1) },
-            "PATCH",
-          ),
-        ),
-      );
+      // 1リクエストで原子的に更新（途中失敗で部分反映を防ぐ）
+      await postJson("/api/tasks/batch", {
+        ops: undone.map((t) => ({
+          id: t.id,
+          patch: { weekIso: addWeeks(t.weekIso, 1) },
+        })),
+      });
     } catch (e) {
       console.error("bulk shift failed", e);
     }
@@ -292,11 +307,13 @@ export function Dashboard() {
     );
 
     try {
-      await Promise.all(
-        next.map((t, i) =>
-          postJson(`/api/tasks/${t.id}`, { sortOrder: i }, "PATCH"),
-        ),
-      );
+      // 1リクエストで原子的に sortOrder 再付与
+      await postJson("/api/tasks/batch", {
+        ops: next.map((t, i) => ({
+          id: t.id,
+          patch: { sortOrder: i },
+        })),
+      });
     } catch (e) {
       console.error("reorder failed", e);
     }

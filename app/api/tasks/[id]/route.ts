@@ -32,6 +32,10 @@ function contributionOf(
   return { memberId: assigneeMemberId, weekIso, hours: estimatedHours };
 }
 
+function bucketKey(b: Bucket): string {
+  return `${b.memberId.toString().padStart(10, "0")}::${b.weekIso}`;
+}
+
 async function adjustWorkload(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   add: Bucket | null,
@@ -77,35 +81,45 @@ async function adjustWorkload(
     }
     return;
   }
-  if (subtract) {
-    await tx
-      .update(schema.workload)
-      .set({
-        plannedHours: sql`GREATEST(0, ${schema.workload.plannedHours}::numeric - ${subtract.hours})`,
-        updatedAt: sql`now()`,
-      })
-      .where(
-        and(
-          eq(schema.workload.memberId, subtract.memberId),
-          eq(schema.workload.weekIso, subtract.weekIso),
-        ),
-      );
-  }
-  if (add) {
-    await tx
-      .insert(schema.workload)
-      .values({
-        memberId: add.memberId,
-        weekIso: add.weekIso,
-        plannedHours: add.hours.toString(),
-      })
-      .onConflictDoUpdate({
-        target: [schema.workload.memberId, schema.workload.weekIso],
-        set: {
-          plannedHours: sql`${schema.workload.plannedHours} + ${add.hours}`,
+
+  // 異なるバケット2件: ロック順を (memberId, weekIso) 昇順で固定して
+  // 逆方向 (A→B / B→A) 同時編集でのデッドロックを避ける
+  const ops: Array<{ bucket: Bucket; kind: "add" | "sub" }> = [];
+  if (subtract) ops.push({ bucket: subtract, kind: "sub" });
+  if (add) ops.push({ bucket: add, kind: "add" });
+  ops.sort((a, b) => bucketKey(a.bucket).localeCompare(bucketKey(b.bucket)));
+
+  for (const op of ops) {
+    const b = op.bucket;
+    if (op.kind === "sub") {
+      await tx
+        .update(schema.workload)
+        .set({
+          plannedHours: sql`GREATEST(0, ${schema.workload.plannedHours}::numeric - ${b.hours})`,
           updatedAt: sql`now()`,
-        },
-      });
+        })
+        .where(
+          and(
+            eq(schema.workload.memberId, b.memberId),
+            eq(schema.workload.weekIso, b.weekIso),
+          ),
+        );
+    } else {
+      await tx
+        .insert(schema.workload)
+        .values({
+          memberId: b.memberId,
+          weekIso: b.weekIso,
+          plannedHours: b.hours.toString(),
+        })
+        .onConflictDoUpdate({
+          target: [schema.workload.memberId, schema.workload.weekIso],
+          set: {
+            plannedHours: sql`${schema.workload.plannedHours} + ${b.hours}`,
+            updatedAt: sql`now()`,
+          },
+        });
+    }
   }
 }
 
@@ -222,6 +236,7 @@ export async function PATCH(
         .select()
         .from(schema.tasks)
         .where(eq(schema.tasks.id, taskId))
+        .for("update")
         .limit(1);
       if (!current) throw new Error("TASK_NOT_FOUND");
 
@@ -281,6 +296,7 @@ export async function DELETE(
         .select()
         .from(schema.tasks)
         .where(eq(schema.tasks.id, taskId))
+        .for("update")
         .limit(1);
       if (!current) throw new Error("TASK_NOT_FOUND");
       const bucket = contributionOf(
