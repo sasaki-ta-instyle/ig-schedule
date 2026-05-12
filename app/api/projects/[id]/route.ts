@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function PATCH(
@@ -46,15 +46,88 @@ export async function DELETE(
   if (!Number.isFinite(projectId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
-  const deletedTasks = await db
-    .delete(schema.tasks)
-    .where(eq(schema.tasks.projectId, projectId))
-    .returning({ id: schema.tasks.id });
-  const [row] = await db
-    .update(schema.projects)
-    .set({ archivedAt: new Date() })
-    .where(eq(schema.projects.id, projectId))
-    .returning();
-  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json({ ok: true, deletedTaskCount: deletedTasks.length });
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      // 1) プロジェクトの存在確認
+      const [exists] = await tx
+        .select({ id: schema.projects.id })
+        .from(schema.projects)
+        .where(eq(schema.projects.id, projectId))
+        .limit(1);
+      if (!exists) {
+        throw new Error("PROJECT_NOT_FOUND");
+      }
+
+      // 2) 対象タスクの (member, week, hours) を取得して workload 減算分を集計
+      const taskRows = await tx
+        .select({
+          assigneeMemberId: schema.tasks.assigneeMemberId,
+          weekIso: schema.tasks.weekIso,
+          estimatedHours: schema.tasks.estimatedHours,
+        })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.projectId, projectId));
+
+      const buckets = new Map<
+        string,
+        { memberId: number; weekIso: string; hours: number }
+      >();
+      for (const t of taskRows) {
+        if (!t.assigneeMemberId || !t.weekIso || t.estimatedHours == null)
+          continue;
+        const h = Number(t.estimatedHours);
+        if (!Number.isFinite(h) || h <= 0) continue;
+        const key = `${t.assigneeMemberId}::${t.weekIso}`;
+        const cur = buckets.get(key);
+        if (cur) cur.hours += h;
+        else
+          buckets.set(key, {
+            memberId: t.assigneeMemberId,
+            weekIso: t.weekIso,
+            hours: h,
+          });
+      }
+
+      // 3) workload を減算（負値防止のため GREATEST で 0 に丸める）
+      for (const b of buckets.values()) {
+        await tx
+          .update(schema.workload)
+          .set({
+            plannedHours: sql`GREATEST(0, ${schema.workload.plannedHours}::numeric - ${b.hours})`,
+            updatedAt: sql`now()`,
+          })
+          .where(
+            and(
+              eq(schema.workload.memberId, b.memberId),
+              eq(schema.workload.weekIso, b.weekIso),
+            ),
+          );
+      }
+
+      // 4) タスクを物理削除
+      const deletedTasks = await tx
+        .delete(schema.tasks)
+        .where(eq(schema.tasks.projectId, projectId))
+        .returning({ id: schema.tasks.id });
+
+      // 5) プロジェクトを soft-archive
+      await tx
+        .update(schema.projects)
+        .set({ archivedAt: new Date() })
+        .where(eq(schema.projects.id, projectId));
+
+      return {
+        deletedTaskCount: deletedTasks.length,
+        adjustedWorkloadBuckets: buckets.size,
+      };
+    });
+
+    return NextResponse.json({ ok: true, ...result });
+  } catch (e) {
+    if ((e as Error).message === "PROJECT_NOT_FOUND") {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    throw e;
+  }
 }

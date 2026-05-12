@@ -52,6 +52,7 @@ export const tasks = pgTable("tasks", {
   done: boolean("done").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   notes: text("notes"),
+  estimatedHours: numeric("estimated_hours", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
