@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEditMode } from "@/hooks/useEditMode";
+import { PasswordPrompt } from "./PasswordPrompt";
 
 const NAV = [
   { href: "/", label: "ダッシュボード" },
@@ -12,7 +13,16 @@ const NAV = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
-  const { mode, setMode, isReadonly } = useEditMode();
+  const {
+    mode,
+    setMode,
+    isReadonly,
+    promptOpen,
+    pending,
+    error,
+    closePrompt,
+    submitPassword,
+  } = useEditMode();
 
   return (
     <div className={`page-wrap ${isReadonly ? "is-readonly" : ""}`}>
@@ -89,6 +99,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main style={{ padding: "8px 32px 60px" }}>{children}</main>
+
+      <PasswordPrompt
+        open={promptOpen}
+        pending={pending}
+        error={error}
+        onSubmit={submitPassword}
+        onCancel={closePrompt}
+      />
     </div>
   );
 }

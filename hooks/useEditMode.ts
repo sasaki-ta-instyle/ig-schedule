@@ -7,7 +7,9 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export function useEditMode() {
   const [mode, setMode] = useState<"preview" | "edit">("preview");
+  const [promptOpen, setPromptOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -23,36 +25,63 @@ export function useEditMode() {
     } catch {}
   }
 
-  async function enterEdit() {
-    if (mode === "edit") return;
-    setPending(true);
+  async function tryEnterEdit() {
+    setError(null);
     try {
       const res = await fetch(`${BASE}/api/auth/edit-check`, {
-        credentials: "include",
         cache: "no-store",
+        credentials: "same-origin",
       });
-      if (!res.ok) {
-        // 401/403 等。ブラウザの Basic Auth プロンプトは出ているはず。
-        // キャンセルされた場合はここに来るので、編集モードに入らない。
+      if (res.ok) {
+        persist("edit");
         return;
       }
-      persist("edit");
+    } catch {}
+    setPromptOpen(true);
+  }
+
+  async function submitPassword(password: string) {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`${BASE}/api/auth/edit-check`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password }),
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (res.ok) {
+        persist("edit");
+        setPromptOpen(false);
+      } else if (res.status === 401) {
+        setError("パスワードが違います");
+      } else {
+        setError(`エラー (${res.status})`);
+      }
     } catch {
-      // ネットワークエラー等。編集モードに入れない。
+      setError("通信エラー");
     } finally {
       setPending(false);
     }
   }
 
-  function exitEdit() {
+  async function exitEdit() {
     persist("preview");
+    try {
+      await fetch(`${BASE}/api/auth/edit-check`, {
+        method: "DELETE",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+    } catch {}
   }
 
   async function update(next: "preview" | "edit") {
     if (next === "edit") {
-      await enterEdit();
+      await tryEnterEdit();
     } else {
-      exitEdit();
+      await exitEdit();
     }
   }
 
@@ -60,7 +89,14 @@ export function useEditMode() {
     mode,
     isEdit: mode === "edit",
     isReadonly: mode === "preview",
+    promptOpen,
     pending,
+    error,
+    closePrompt: () => {
+      setPromptOpen(false);
+      setError(null);
+    },
+    submitPassword,
     setMode: update,
     toggle: () => update(mode === "edit" ? "preview" : "edit"),
   };
