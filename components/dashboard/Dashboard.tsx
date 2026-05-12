@@ -186,9 +186,7 @@ export function Dashboard() {
                     borderRadius: "var(--r-sm)",
                     zIndex: 2,
                   }}
-                >
-                  <span className="eyebrow">MEMBER</span>
-                </th>
+                ></th>
                 {weeks.map((w) => {
                   const hol = holidaysInWeek(w);
                   return (
