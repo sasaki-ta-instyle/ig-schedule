@@ -28,11 +28,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className={`page-wrap ${isReadonly ? "is-readonly" : ""}`}>
       <header
         style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
           display: "grid",
           gridTemplateColumns: "1fr auto 1fr",
           alignItems: "center",
           gap: 20,
-          padding: "20px 32px",
+          padding: "16px 32px",
+          background: "rgba(237, 233, 224, 0.72)",
+          backdropFilter: "saturate(180%) blur(16px)",
+          WebkitBackdropFilter: "saturate(180%) blur(16px)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.42)",
         }}
       >
         <div
