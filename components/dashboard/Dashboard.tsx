@@ -178,14 +178,13 @@ export function Dashboard() {
                   style={{
                     position: "sticky",
                     left: 0,
-                    background: "rgba(243,241,238,.78)",
-                    backdropFilter: "blur(12px)",
+                    background: "transparent",
                     width: 110,
-                    textAlign: "left",
-                    padding: "6px 10px",
-                    borderRadius: "var(--r-sm)",
+                    padding: 0,
+                    border: "none",
                     zIndex: 2,
                   }}
+                  aria-hidden="true"
                 ></th>
                 {weeks.map((w) => {
                   const hol = holidaysInWeek(w);
