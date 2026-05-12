@@ -25,11 +25,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: 6,
+          }}
+        >
           <img
             src="https://app.instyle.group/_shared/static/logo.svg"
             alt="INSTYLE GROUP"
-            style={{ height: 6, width: "auto", opacity: 0.9 }}
+            style={{ height: 8, width: "auto", display: "block", opacity: 0.9 }}
           />
           <strong
             className="t-h4"
