@@ -123,6 +123,47 @@ export function Dashboard() {
     mutate(tasksKey);
   }
 
+  function applyWorkloadDelta(
+    prev: Workload[],
+    moves: Array<{
+      memberId: number;
+      fromWeek: string;
+      toWeek: string;
+      hours: number;
+    }>,
+  ): Workload[] {
+    const map = new Map<string, Workload>();
+    for (const w of prev) map.set(`${w.memberId}::${w.weekIso}`, { ...w });
+    for (const mv of moves) {
+      if (mv.hours <= 0) continue;
+      const fromKey = `${mv.memberId}::${mv.fromWeek}`;
+      const f = map.get(fromKey);
+      if (f) {
+        map.set(fromKey, {
+          ...f,
+          plannedHours: String(Math.max(0, Number(f.plannedHours) - mv.hours)),
+        });
+      }
+      const toKey = `${mv.memberId}::${mv.toWeek}`;
+      const t = map.get(toKey);
+      if (t) {
+        map.set(toKey, {
+          ...t,
+          plannedHours: String(Number(t.plannedHours) + mv.hours),
+        });
+      } else {
+        map.set(toKey, {
+          id: -Date.now() - Math.floor(Math.random() * 1000),
+          memberId: mv.memberId,
+          weekIso: mv.toWeek,
+          plannedHours: String(mv.hours),
+          note: null,
+        } as Workload);
+      }
+    }
+    return Array.from(map.values());
+  }
+
   async function shiftWeek(task: Task, delta: -1 | 1) {
     const targetWeek = addWeeks(task.weekIso, delta);
     mutate(
@@ -133,6 +174,22 @@ export function Dashboard() {
         ),
       { revalidate: false },
     );
+    const hours = task.estimatedHours ? Number(task.estimatedHours) : 0;
+    if (task.assigneeMemberId && hours > 0) {
+      mutate(
+        workloadKey,
+        (prev: Workload[] = []) =>
+          applyWorkloadDelta(prev, [
+            {
+              memberId: task.assigneeMemberId!,
+              fromWeek: task.weekIso,
+              toWeek: targetWeek,
+              hours,
+            },
+          ]),
+        { revalidate: false },
+      );
+    }
     try {
       await postJson(
         `/api/tasks/${task.id}`,
@@ -155,7 +212,6 @@ export function Dashboard() {
       )
     )
       return;
-    // 楽観的更新
     const idMap = new Map(
       undone.map((t) => [t.id, addWeeks(t.weekIso, 1)] as const),
     );
@@ -167,6 +223,25 @@ export function Dashboard() {
         ),
       { revalidate: false },
     );
+    const moves = undone
+      .map((t) => {
+        const h = t.estimatedHours ? Number(t.estimatedHours) : 0;
+        if (!t.assigneeMemberId || h <= 0) return null;
+        return {
+          memberId: t.assigneeMemberId,
+          fromWeek: t.weekIso,
+          toWeek: addWeeks(t.weekIso, 1),
+          hours: h,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+    if (moves.length > 0) {
+      mutate(
+        workloadKey,
+        (prev: Workload[] = []) => applyWorkloadDelta(prev, moves),
+        { revalidate: false },
+      );
+    }
     try {
       await Promise.all(
         undone.map((t) =>
@@ -636,6 +711,7 @@ function TaskRow({
           style={{
             display: "flex",
             flexDirection: "column",
+            alignItems: "center",
             gap: 1,
             flexShrink: 0,
           }}
@@ -648,15 +724,6 @@ function TaskRow({
             style={moveBtnStyle}
           >
             ↑
-          </button>
-          <button
-            type="button"
-            onClick={onMoveDown}
-            disabled={!canMoveDown}
-            title="下へ"
-            style={moveBtnStyle}
-          >
-            ↓
           </button>
           <div style={{ display: "flex", gap: 0 }}>
             {onShiftPrev && (
@@ -680,6 +747,15 @@ function TaskRow({
               </button>
             )}
           </div>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            title="下へ"
+            style={moveBtnStyle}
+          >
+            ↓
+          </button>
         </div>
       )}
     </li>
