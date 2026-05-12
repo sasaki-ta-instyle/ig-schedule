@@ -35,6 +35,12 @@ export function AdminPanel() {
   const [showCreate, setShowCreate] = useState(false);
 
   async function updateProject(p: Project, patch: Partial<Project>) {
+    mutate(
+      "/api/projects",
+      (prev: Project[] = []) =>
+        prev.map((x) => (x.id === p.id ? { ...x, ...patch } : x)),
+      { revalidate: false },
+    );
     await postJson(`/api/projects/${p.id}`, patch, "PATCH");
     mutate("/api/projects");
   }
@@ -48,6 +54,12 @@ export function AdminPanel() {
     await del(`/api/projects/${p.id}`);
     mutate("/api/projects");
     mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
+  }
+  function togglePlannedMember(p: Project, memberId: number) {
+    const next = p.plannedMemberIds.includes(memberId)
+      ? p.plannedMemberIds.filter((x) => x !== memberId)
+      : [...p.plannedMemberIds, memberId];
+    return updateProject(p, { plannedMemberIds: next });
   }
 
   return (
@@ -68,15 +80,22 @@ export function AdminPanel() {
             プロジェクト管理
           </h2>
         </div>
-        {isEdit && (
-          <button
-            type="button"
-            className="btn btn-primary edit-only"
-            onClick={() => setShowCreate(true)}
-          >
-            ＋ 新規プロジェクト
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {!isEdit && (
+            <span className="t-small muted">
+              編集するにはヘッダの「編集」モードに切替
+            </span>
+          )}
+          {isEdit && (
+            <button
+              type="button"
+              className="btn btn-primary edit-only"
+              onClick={() => setShowCreate(true)}
+            >
+              ＋ 新規プロジェクト
+            </button>
+          )}
+        </div>
       </header>
 
       {!projects ? (
@@ -97,100 +116,15 @@ export function AdminPanel() {
           }}
         >
           {projects.map((p) => (
-            <li key={p.id} className="glass-card" style={{ padding: 14 }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr 140px 140px auto",
-                  gap: 10,
-                  alignItems: "center",
-                }}
-              >
-                {isEdit ? (
-                  <input
-                    type="color"
-                    value={p.color}
-                    onChange={(e) => updateProject(p, { color: e.target.value })}
-                    style={{
-                      width: 28,
-                      height: 28,
-                      border: "1px solid rgba(255,255,255,.7)",
-                      borderRadius: 999,
-                      background: "transparent",
-                      cursor: "pointer",
-                    }}
-                    list={`palette-${p.id}`}
-                  />
-                ) : (
-                  <span
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 999,
-                      background: p.color,
-                    }}
-                  />
-                )}
-                <datalist id={`palette-${p.id}`}>
-                  {COLORS.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
-                {isEdit ? (
-                  <input
-                    className="input editable-only"
-                    defaultValue={p.name}
-                    onBlur={(e) => {
-                      const v = e.currentTarget.value.trim();
-                      if (v && v !== p.name) updateProject(p, { name: v });
-                    }}
-                  />
-                ) : (
-                  <strong>{p.name}</strong>
-                )}
-                {isEdit ? (
-                  <input
-                    type="date"
-                    className="input editable-only"
-                    defaultValue={p.dueDate ?? ""}
-                    onBlur={(e) => {
-                      const v = e.currentTarget.value || null;
-                      if (v !== p.dueDate) updateProject(p, { dueDate: v });
-                    }}
-                    style={{ fontSize: ".75rem" }}
-                  />
-                ) : (
-                  <span className="t-small muted">
-                    期日 {p.dueDate ?? "—"}
-                  </span>
-                )}
-                <span className="t-small muted">
-                  担当 {p.plannedMemberIds.length} 名
-                </span>
-                {isEdit && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm edit-only"
-                    onClick={() => archiveProject(p)}
-                    title="アーカイブ"
-                  >
-                    アーカイブ
-                  </button>
-                )}
-              </div>
-              {p.summary && (
-                <p
-                  className="t-small muted"
-                  style={{
-                    marginTop: 8,
-                    whiteSpace: "pre-wrap",
-                    paddingLeft: 38,
-                  }}
-                >
-                  {p.summary}
-                </p>
-              )}
-            </li>
+            <ProjectRow
+              key={p.id}
+              project={p}
+              members={members ?? []}
+              isEdit={isEdit}
+              onUpdate={(patch) => updateProject(p, patch)}
+              onToggleMember={(id) => togglePlannedMember(p, id)}
+              onArchive={() => archiveProject(p)}
+            />
           ))}
         </ul>
       )}
@@ -211,5 +145,205 @@ export function AdminPanel() {
         />
       )}
     </section>
+  );
+}
+
+function ProjectRow({
+  project: p,
+  members,
+  isEdit,
+  onUpdate,
+  onToggleMember,
+  onArchive,
+}: {
+  project: Project;
+  members: Member[];
+  isEdit: boolean;
+  onUpdate: (patch: Partial<Project>) => void | Promise<void>;
+  onToggleMember: (memberId: number) => void | Promise<void>;
+  onArchive: () => void | Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const memberById: Record<number, Member> = {};
+  for (const m of members) memberById[m.id] = m;
+
+  return (
+    <li className="glass-card" style={{ padding: 14 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto 1fr 140px auto auto",
+          gap: 10,
+          alignItems: "center",
+        }}
+      >
+        {isEdit ? (
+          <input
+            type="color"
+            value={p.color}
+            onChange={(e) => onUpdate({ color: e.target.value })}
+            style={{
+              width: 28,
+              height: 28,
+              border: "1px solid rgba(255,255,255,.7)",
+              borderRadius: 999,
+              background: "transparent",
+              cursor: "pointer",
+            }}
+            list={`palette-${p.id}`}
+          />
+        ) : (
+          <span
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 999,
+              background: p.color,
+            }}
+          />
+        )}
+        <datalist id={`palette-${p.id}`}>
+          {COLORS.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
+
+        {isEdit ? (
+          <input
+            className="input editable-only"
+            defaultValue={p.name}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              if (v && v !== p.name) onUpdate({ name: v });
+            }}
+          />
+        ) : (
+          <strong>{p.name}</strong>
+        )}
+
+        {isEdit ? (
+          <input
+            type="date"
+            className="input editable-only"
+            defaultValue={p.dueDate ?? ""}
+            onBlur={(e) => {
+              const v = e.currentTarget.value || null;
+              if (v !== p.dueDate) onUpdate({ dueDate: v });
+            }}
+            style={{ fontSize: ".75rem" }}
+          />
+        ) : (
+          <span className="t-small muted">期日 {p.dueDate ?? "—"}</span>
+        )}
+
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => setExpanded((v) => !v)}
+          title="詳細を開く"
+          style={{ fontSize: ".75rem" }}
+        >
+          {expanded ? "閉じる" : "詳細"} {expanded ? "▴" : "▾"}
+        </button>
+
+        {isEdit && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm edit-only"
+            onClick={onArchive}
+            title="アーカイブ"
+            style={{ fontSize: ".75rem", color: "var(--color-error)" }}
+          >
+            アーカイブ
+          </button>
+        )}
+      </div>
+
+      {/* 担当チップ（常に表示、編集時はクリックで toggle） */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 4,
+          marginTop: 8,
+          paddingLeft: 38,
+        }}
+      >
+        {(isEdit ? members : p.plannedMemberIds.map((id) => memberById[id]).filter(Boolean)).map(
+          (m) => {
+            if (!m) return null;
+            const active = p.plannedMemberIds.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                type="button"
+                className="badge"
+                onClick={() => isEdit && onToggleMember(m.id)}
+                disabled={!isEdit}
+                style={{
+                  cursor: isEdit ? "pointer" : "default",
+                  opacity: isEdit && !active ? 0.4 : 1,
+                  background: active ? "rgba(255,255,255,.78)" : "rgba(255,255,255,.32)",
+                  border: active
+                    ? "1px solid rgba(255,255,255,.78)"
+                    : "1px solid rgba(53,54,45,.18)",
+                  paddingLeft: 8,
+                }}
+                aria-pressed={active}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: m.color,
+                    display: "inline-block",
+                    marginRight: 4,
+                  }}
+                />
+                {m.name}
+              </button>
+            );
+          },
+        )}
+        {!isEdit && p.plannedMemberIds.length === 0 && (
+          <span className="t-small subtle">担当未設定</span>
+        )}
+      </div>
+
+      {/* 概要（詳細展開時、編集モード時は textarea） */}
+      {expanded && (
+        <div style={{ marginTop: 10, paddingLeft: 38 }}>
+          <label className="form-label" style={{ fontSize: ".6875rem" }}>
+            概要
+          </label>
+          {isEdit ? (
+            <textarea
+              className="input editable-only"
+              defaultValue={p.summary}
+              rows={4}
+              onBlur={(e) => {
+                const v = e.currentTarget.value;
+                if (v !== p.summary) onUpdate({ summary: v });
+              }}
+              placeholder="プロジェクトの目的・主要なフェーズなど"
+            />
+          ) : (
+            <p
+              className="t-small muted"
+              style={{
+                whiteSpace: "pre-wrap",
+                padding: "8px 10px",
+                background: "rgba(255,255,255,.32)",
+                borderRadius: "var(--r-sm)",
+                margin: 0,
+              }}
+            >
+              {p.summary || "（概要なし）"}
+            </p>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
