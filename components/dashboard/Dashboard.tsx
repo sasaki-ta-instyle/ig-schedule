@@ -123,6 +123,25 @@ export function Dashboard() {
     mutate(tasksKey);
   }
 
+  async function reorderInCell(
+    cellTasks: Task[],
+    index: number,
+    delta: -1 | 1,
+  ) {
+    const target = index + delta;
+    if (target < 0 || target >= cellTasks.length) return;
+    const next = [...cellTasks];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    // セル内タスクに 0..N-1 の sortOrder を再付与
+    await Promise.all(
+      next.map((t, i) =>
+        postJson(`/api/tasks/${t.id}`, { sortOrder: i }, "PATCH"),
+      ),
+    );
+    mutate(tasksKey);
+  }
+
   return (
     <section
       className="glass-panel allow-sticky"
@@ -309,13 +328,19 @@ export function Dashboard() {
                             gap: 4,
                           }}
                         >
-                          {cellTasks.map((t) => (
+                          {cellTasks.map((t, idx) => (
                             <TaskRow
                               key={t.id}
                               task={t}
                               project={projectsById[t.projectId]}
                               isEdit={isEdit}
                               onToggle={() => toggleDone(t)}
+                              canMoveUp={idx > 0}
+                              canMoveDown={idx < cellTasks.length - 1}
+                              onMoveUp={() => reorderInCell(cellTasks, idx, -1)}
+                              onMoveDown={() =>
+                                reorderInCell(cellTasks, idx, 1)
+                              }
                             />
                           ))}
                         </ul>
@@ -417,16 +442,35 @@ function HoursBadge({
   );
 }
 
+const moveBtnStyle: React.CSSProperties = {
+  fontSize: ".5rem",
+  lineHeight: 1,
+  padding: "1px 4px",
+  background: "rgba(255,255,255,.55)",
+  border: "1px solid rgba(255,255,255,.62)",
+  borderRadius: 4,
+  cursor: "pointer",
+  color: "var(--color-text-muted)",
+};
+
 function TaskRow({
   task,
   project,
   isEdit,
   onToggle,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
 }: {
   task: Task;
   project: Project | undefined;
   isEdit: boolean;
   onToggle: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   return (
     <li
@@ -468,6 +512,36 @@ function TaskRow({
           {task.title}
         </span>
       </div>
+      {isEdit && (onMoveUp || onMoveDown) && (
+        <div
+          className="edit-only"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            title="上へ"
+            style={moveBtnStyle}
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            title="下へ"
+            style={moveBtnStyle}
+          >
+            ▼
+          </button>
+        </div>
+      )}
     </li>
   );
 }
