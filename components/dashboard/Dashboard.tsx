@@ -30,6 +30,7 @@ type Task = {
   done: boolean;
   sortOrder: number;
   notes: string | null;
+  estimatedHours: string | null;
 };
 type Workload = {
   id: number;
