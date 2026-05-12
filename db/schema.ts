@@ -76,7 +76,20 @@ export const workload = pgTable(
   }),
 );
 
+export const sessions = pgTable("sessions", {
+  id: text("id").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  label: text("label"),
+});
+
 export type Member = typeof members.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type Workload = typeof workload.$inferSelect;
+export type Session = typeof sessions.$inferSelect;

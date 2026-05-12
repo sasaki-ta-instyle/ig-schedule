@@ -1,23 +1,16 @@
 import crypto from "node:crypto";
+import { and, eq, gt } from "drizzle-orm";
+import { db, schema } from "@/db/client";
 
 const COOKIE = "ig_edit";
+const MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30日
 
 function getPassword(): string {
   return process.env.EDIT_MODE_PASSWORD ?? "";
 }
 
-function token(): string {
-  const pw = getPassword();
-  if (!pw) return "";
-  return crypto.createHmac("sha256", pw).update("ig-schedule-edit-v1").digest("hex");
-}
-
 export function isAuthEnabled(): boolean {
   return Boolean(getPassword());
-}
-
-export function expectedToken(): string {
-  return token();
 }
 
 export function verifyPassword(plain: unknown): boolean {
@@ -35,16 +28,55 @@ export function readCookie(req: Request, name: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-export function isAuthorized(req: Request): boolean {
+function newSessionId(): string {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+export async function createSession(label?: string | null): Promise<string> {
+  const id = newSessionId();
+  const expiresAt = new Date(Date.now() + MAX_AGE_SEC * 1000);
+  await db.insert(schema.sessions).values({
+    id,
+    expiresAt,
+    label: label ?? null,
+  });
+  return id;
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  if (!id) return;
+  await db.delete(schema.sessions).where(eq(schema.sessions.id, id));
+}
+
+export async function touchSessionIfValid(id: string): Promise<boolean> {
+  if (!id) return false;
+  // 期限内のセッションだけ有効
+  const [row] = await db
+    .select({ id: schema.sessions.id })
+    .from(schema.sessions)
+    .where(
+      and(
+        eq(schema.sessions.id, id),
+        gt(schema.sessions.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!row) return false;
+  // last_seen を更新（ベストエフォート）
+  try {
+    await db
+      .update(schema.sessions)
+      .set({ lastSeenAt: new Date() })
+      .where(eq(schema.sessions.id, id));
+  } catch {}
+  return true;
+}
+
+export async function isAuthorizedAsync(req: Request): Promise<boolean> {
   if (!isAuthEnabled()) return true;
-  const t = readCookie(req, COOKIE);
-  if (!t) return false;
-  const expected = expectedToken();
-  if (t.length !== expected.length) return false;
-  return crypto.timingSafeEqual(
-    Buffer.from(t, "utf8"),
-    Buffer.from(expected, "utf8"),
-  );
+  const sid = readCookie(req, COOKIE);
+  if (!sid) return false;
+  return touchSessionIfValid(sid);
 }
 
 export function authCookieHeader(value: string, maxAgeSec: number): string {
@@ -59,4 +91,4 @@ export function authCookieHeader(value: string, maxAgeSec: number): string {
   return parts.join("; ");
 }
 
-export const COOKIE_NAME = COOKIE;
+export { COOKIE as COOKIE_NAME, MAX_AGE_SEC };

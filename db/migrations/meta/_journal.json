@@ -15,6 +15,13 @@
       "when": 1778576321889,
       "tag": "0001_fat_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778592858784,
+      "tag": "0002_unique_glorian",
+      "breakpoints": true
     }
   ]
 }

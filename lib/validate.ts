@@ -27,7 +27,35 @@ const WEEK_ISO_RE = /^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export function isValidWeekIso(s: unknown): s is string {
-  return typeof s === "string" && WEEK_ISO_RE.test(s);
+  if (typeof s !== "string" || !WEEK_ISO_RE.test(s)) return false;
+  // 形式が合っても実在しない週 (2021-W53 など) を弾く: 月曜の round-trip で同一文字列に戻ることを確認
+  try {
+    const m = s.match(/^(\d{4})-W(\d{2})$/)!;
+    const year = Number(m[1]);
+    const week = Number(m[2]);
+    const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+    const dow = simple.getUTCDay();
+    const offset = dow <= 4 ? 1 - dow : 8 - dow;
+    simple.setUTCDate(simple.getUTCDate() + offset);
+    // monday を Iso week に再変換
+    const d = new Date(
+      Date.UTC(
+        simple.getUTCFullYear(),
+        simple.getUTCMonth(),
+        simple.getUTCDate(),
+      ),
+    );
+    const day = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil(
+      (((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7,
+    );
+    const roundtrip = `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+    return roundtrip === s;
+  } catch {
+    return false;
+  }
 }
 
 export function isValidColor(s: unknown): s is string {
