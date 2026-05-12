@@ -10,33 +10,60 @@ import {
   currentWeekIso,
   toWeekIso,
   weekIsoLabel,
-  weekIsoRange,
 } from "@/lib/week";
-
-type GenInput = {
-  name: string;
-  summary: string;
-  dueDate?: string | null;
-  plannedMemberIds: number[];
-  model?: string;
-};
+import {
+  isPositiveIntArray,
+  isValidModel,
+  sanitizeText,
+  TEXT_LIMITS,
+} from "@/lib/validate";
 
 export const maxDuration = 60;
 
+const AI_TIMEOUT_MS = 90_000;
+
 export async function POST(req: Request) {
-  let body: GenInput;
+  let body: Record<string, unknown> = {};
   try {
-    body = (await req.json()) as GenInput;
+    body = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
-  const { name, summary, dueDate, plannedMemberIds, model } = body;
-  if (!name || !summary || !Array.isArray(plannedMemberIds) || plannedMemberIds.length === 0) {
+
+  const name = sanitizeText(body.name, TEXT_LIMITS.projectName);
+  const summary = sanitizeText(body.summary, TEXT_LIMITS.projectSummary);
+  if (!name || !summary) {
     return NextResponse.json(
-      { error: "name, summary, plannedMemberIds(>=1) are required" },
+      {
+        error: `name (1..${TEXT_LIMITS.projectName}) and summary (1..${TEXT_LIMITS.projectSummary}) are required`,
+      },
       { status: 400 },
     );
   }
+  if (!isPositiveIntArray(body.plannedMemberIds)) {
+    return NextResponse.json(
+      { error: "plannedMemberIds must be array of positive integers" },
+      { status: 400 },
+    );
+  }
+  const plannedMemberIds = body.plannedMemberIds as number[];
+  if (plannedMemberIds.length === 0) {
+    return NextResponse.json(
+      { error: "plannedMemberIds must have at least 1 member" },
+      { status: 400 },
+    );
+  }
+  const dueDate =
+    typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
+      ? body.dueDate
+      : null;
+  if (body.model != null && !isValidModel(body.model)) {
+    return NextResponse.json(
+      { error: "model is not in the allowlist" },
+      { status: 400 },
+    );
+  }
+  const model = (body.model as string | undefined) ?? DEFAULT_MODEL;
 
   const startWeek = currentWeekIso();
   let endWeek = dueDate ? toWeekIso(new Date(dueDate)) : addWeeks(startWeek, 7);
@@ -101,45 +128,85 @@ export async function POST(req: Request) {
     memberContext,
   });
 
-  const response = await client.messages.create({
-    model: model ?? DEFAULT_MODEL,
-    max_tokens: 4096,
-    system: [
-      { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
-    ],
-    tools: [
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
+  let response: Awaited<ReturnType<typeof client.messages.create>>;
+  try {
+    response = await client.messages.create(
       {
-        name: "submit_tasks",
-        description:
-          "プロジェクト遂行に必要なタスクを列挙し、週と担当者を割り当てて提出する。",
-        input_schema: {
-          type: "object",
-          properties: {
-            tasks: {
-              type: "array",
-              minItems: 3,
-              maxItems: 30,
-              items: {
-                type: "object",
-                required: ["title", "weekIso", "assigneeMemberId"],
-                properties: {
-                  title: { type: "string" },
-                  weekIso: { type: "string", pattern: "^\\d{4}-W\\d{2}$" },
-                  assigneeMemberId: { type: "integer" },
-                  notes: { type: "string" },
-                  estimatedHours: { type: "number", minimum: 0 },
-                },
-              },
-            },
-            rationale: { type: "string" },
+        model,
+        max_tokens: 4096,
+        system: [
+          {
+            type: "text",
+            text: systemPrompt,
+            cache_control: { type: "ephemeral" },
           },
-          required: ["tasks"],
-        },
+        ],
+        tools: [
+          {
+            name: "submit_tasks",
+            description:
+              "プロジェクト遂行に必要なタスクを列挙し、週と担当者を割り当てて提出する。",
+            input_schema: {
+              type: "object",
+              properties: {
+                tasks: {
+                  type: "array",
+                  minItems: 3,
+                  maxItems: 30,
+                  items: {
+                    type: "object",
+                    required: ["title", "weekIso", "assigneeMemberId"],
+                    properties: {
+                      title: {
+                        type: "string",
+                        minLength: 1,
+                        maxLength: TEXT_LIMITS.taskTitle,
+                      },
+                      weekIso: {
+                        type: "string",
+                        pattern: "^\\d{4}-W\\d{2}$",
+                      },
+                      assigneeMemberId: { type: "integer" },
+                      notes: {
+                        type: "string",
+                        maxLength: TEXT_LIMITS.taskNotes,
+                      },
+                      estimatedHours: {
+                        type: "number",
+                        minimum: 0,
+                        maximum: 40,
+                      },
+                    },
+                  },
+                },
+                rationale: { type: "string", maxLength: 1000 },
+              },
+              required: ["tasks"],
+            },
+          },
+        ],
+        tool_choice: { type: "tool", name: "submit_tasks" },
+        messages: [{ role: "user", content: userPrompt }],
       },
-    ],
-    tool_choice: { type: "tool", name: "submit_tasks" },
-    messages: [{ role: "user", content: userPrompt }],
-  });
+      { signal: abort.signal },
+    );
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = (e as Error).message ?? "";
+    if (msg.includes("aborted") || msg.includes("AbortError")) {
+      return NextResponse.json(
+        { error: "AI generation timed out" },
+        { status: 504 },
+      );
+    }
+    return NextResponse.json(
+      { error: `AI error: ${msg.slice(0, 200)}` },
+      { status: 502 },
+    );
+  }
+  clearTimeout(timer);
 
   const toolUse = response.content.find((c) => c.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") {
@@ -162,26 +229,35 @@ export async function POST(req: Request) {
   const memberIdSet = new Set(plannedMemberIds);
   const weekSet = new Set(weeks);
   const tasks = (raw.tasks ?? [])
-    .filter(
-      (t) =>
-        t.title &&
-        weekSet.has(t.weekIso) &&
-        memberIdSet.has(Number(t.assigneeMemberId)),
-    )
-    .map((t, i) => ({
-      title: t.title,
-      weekIso: t.weekIso,
-      assigneeMemberId: Number(t.assigneeMemberId),
-      notes: t.notes ?? null,
-      estimatedHours:
-        typeof t.estimatedHours === "number" ? t.estimatedHours : null,
-      sortOrder: i,
-    }));
+    .map((t, i) => {
+      const title = sanitizeText(t.title, TEXT_LIMITS.taskTitle);
+      const assignee = Number(t.assigneeMemberId);
+      if (!title) return null;
+      if (!weekSet.has(t.weekIso)) return null;
+      if (!memberIdSet.has(assignee)) return null;
+      const notes =
+        t.notes == null
+          ? null
+          : sanitizeText(t.notes, TEXT_LIMITS.taskNotes, { allowEmpty: true });
+      const hours =
+        typeof t.estimatedHours === "number" && Number.isFinite(t.estimatedHours)
+          ? Math.max(0, Math.min(40, t.estimatedHours))
+          : null;
+      return {
+        title,
+        weekIso: t.weekIso,
+        assigneeMemberId: assignee,
+        notes,
+        estimatedHours: hours,
+        sortOrder: i,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
 
   return NextResponse.json({
     tasks,
-    rationale: raw.rationale ?? "",
-    meta: { startWeek, endWeek, model: model ?? DEFAULT_MODEL },
+    rationale: sanitizeText(raw.rationale, 1000, { allowEmpty: true }) ?? "",
+    meta: { startWeek, endWeek, model },
   });
 }
 

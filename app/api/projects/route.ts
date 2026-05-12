@@ -1,6 +1,16 @@
 import { db, schema } from "@/db/client";
 import { asc, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import {
+  clampHours,
+  isPositiveIntArray,
+  isValidColor,
+  isValidProjectStatus,
+  isValidWeekIso,
+  sanitizeText,
+  TEXT_LIMITS,
+  toIntId,
+} from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -13,70 +23,134 @@ export async function GET() {
   return NextResponse.json(rows);
 }
 
+type IncomingTask = {
+  title: unknown;
+  weekIso: unknown;
+  assigneeMemberId?: unknown;
+  notes?: unknown;
+  sortOrder?: unknown;
+  estimatedHours?: unknown;
+};
+
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { name, summary, dueDate, color, status, plannedMemberIds, tasks, aiSeed } =
-    body ?? {};
-  if (!name || typeof name !== "string") {
-    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  let body: Record<string, unknown> = {};
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  type IncomingTask = {
+  const name = sanitizeText(body.name, TEXT_LIMITS.projectName);
+  if (!name) {
+    return NextResponse.json(
+      { error: `name must be 1..${TEXT_LIMITS.projectName} chars` },
+      { status: 400 },
+    );
+  }
+  const summary = sanitizeText(body.summary, TEXT_LIMITS.projectSummary, {
+    allowEmpty: true,
+  }) ?? "";
+  const dueDate =
+    typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
+      ? body.dueDate
+      : null;
+  const color = isValidColor(body.color) ? body.color : "#38537B";
+  const status = isValidProjectStatus(body.status) ? body.status : "active";
+  const plannedMemberIds = isPositiveIntArray(body.plannedMemberIds)
+    ? (body.plannedMemberIds as number[])
+    : [];
+
+  // タスク配列の事前検証
+  const incoming = Array.isArray(body.tasks) ? (body.tasks as IncomingTask[]) : [];
+  type CleanTask = {
     title: string;
     weekIso: string;
-    assigneeMemberId?: number | null;
-    notes?: string | null;
-    sortOrder?: number;
-    estimatedHours?: number | null;
+    assigneeMemberId: number | null;
+    notes: string | null;
+    sortOrder: number;
+    estimatedHours: number | null;
   };
+  const cleanTasks: CleanTask[] = [];
+  for (let i = 0; i < incoming.length; i++) {
+    const t = incoming[i];
+    const title = sanitizeText(t.title, TEXT_LIMITS.taskTitle);
+    if (!title) continue;
+    if (!isValidWeekIso(t.weekIso)) continue;
+    const assignee =
+      t.assigneeMemberId == null ? null : toIntId(t.assigneeMemberId);
+    if (t.assigneeMemberId != null && assignee == null) continue;
+    const notes =
+      t.notes == null
+        ? null
+        : sanitizeText(t.notes, TEXT_LIMITS.taskNotes, { allowEmpty: true });
+    const estimated = t.estimatedHours == null ? null : clampHours(t.estimatedHours);
+    cleanTasks.push({
+      title,
+      weekIso: t.weekIso as string,
+      assigneeMemberId: assignee,
+      notes,
+      sortOrder:
+        typeof t.sortOrder === "number" && Number.isInteger(t.sortOrder)
+          ? (t.sortOrder as number)
+          : i,
+      estimatedHours: estimated,
+    });
+  }
+
+  type AiSeed = {
+    summary: string;
+    dueDate?: string;
+    plannedMemberIds: number[];
+    model?: string;
+  } | null;
+  const aiSeed: AiSeed =
+    body.aiSeed && typeof body.aiSeed === "object"
+      ? (body.aiSeed as AiSeed)
+      : null;
 
   const project = await db.transaction(async (tx) => {
     const [projectRow] = await tx
       .insert(schema.projects)
       .values({
         name,
-        summary: summary ?? "",
-        dueDate: dueDate ?? null,
-        color: color ?? "#38537B",
-        status: status ?? "active",
-        plannedMemberIds: Array.isArray(plannedMemberIds) ? plannedMemberIds : [],
-        aiSeed: aiSeed ?? null,
+        summary,
+        dueDate,
+        color,
+        status,
+        plannedMemberIds,
+        aiSeed,
       })
       .returning();
 
-    if (Array.isArray(tasks) && tasks.length > 0) {
+    if (cleanTasks.length > 0) {
       await tx.insert(schema.tasks).values(
-        (tasks as IncomingTask[]).map((t, i) => ({
+        cleanTasks.map((t) => ({
           projectId: projectRow.id,
           title: t.title,
           weekIso: t.weekIso,
-          assigneeMemberId: t.assigneeMemberId ?? null,
-          notes: t.notes ?? null,
-          sortOrder: t.sortOrder ?? i,
+          assigneeMemberId: t.assigneeMemberId,
+          notes: t.notes,
+          sortOrder: t.sortOrder,
           estimatedHours:
-            typeof t.estimatedHours === "number" && Number.isFinite(t.estimatedHours)
-              ? t.estimatedHours.toString()
-              : null,
+            t.estimatedHours == null ? null : t.estimatedHours.toString(),
         })),
       );
 
-      // member × week ごとの estimatedHours 合計を workload に加算
       const buckets = new Map<
         string,
         { memberId: number; weekIso: string; hours: number }
       >();
-      for (const t of tasks as IncomingTask[]) {
-        const h = Number(t.estimatedHours);
-        if (!t.assigneeMemberId || !t.weekIso || !Number.isFinite(h) || h <= 0)
-          continue;
+      for (const t of cleanTasks) {
+        if (!t.assigneeMemberId || t.estimatedHours == null) continue;
+        if (t.estimatedHours <= 0) continue;
         const key = `${t.assigneeMemberId}::${t.weekIso}`;
         const cur = buckets.get(key);
-        if (cur) cur.hours += h;
+        if (cur) cur.hours += t.estimatedHours;
         else
           buckets.set(key, {
             memberId: t.assigneeMemberId,
             weekIso: t.weekIso,
-            hours: h,
+            hours: t.estimatedHours,
           });
       }
 

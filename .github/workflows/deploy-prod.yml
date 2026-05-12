@@ -183,7 +183,11 @@ jobs:
               PREV=\$(cat .previous_release)
               ln -sfn \$PREV current.new
               mv -T current.new current
-              pm2 reload ${CATEGORY}-${APP_NAME} --update-env || true
+              cd current
+              # forward デプロイ側と対称な delete + start で確実に新 ecosystem を読み込ませる
+              pm2 delete ${CATEGORY}-${APP_NAME} 2>/dev/null || true
+              pm2 start ecosystem.config.cjs --update-env
+              pm2 save
               echo 'Rolled back to '\$PREV
             else
               echo '::warning::No previous release to roll back to'

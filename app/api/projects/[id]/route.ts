@@ -1,33 +1,102 @@
 import { db, schema } from "@/db/client";
 import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import {
+  isPositiveIntArray,
+  isValidColor,
+  isValidProjectStatus,
+  sanitizeText,
+  TEXT_LIMITS,
+  toIntId,
+} from "@/lib/validate";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const projectId = Number(id);
-  if (!Number.isFinite(projectId)) {
+  const projectId = toIntId(id);
+  if (!projectId) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
-  const body = await req.json();
-  const allowed = [
-    "name",
-    "summary",
-    "dueDate",
-    "color",
-    "status",
-    "plannedMemberIds",
-    "sortOrder",
-  ] as const;
-  const update: Record<string, unknown> = {};
-  for (const key of allowed) {
-    if (key in body) update[key] = body[key];
+  let body: Record<string, unknown> = {};
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
+  const update: Record<string, unknown> = {};
+
+  if ("name" in body) {
+    const v = sanitizeText(body.name, TEXT_LIMITS.projectName);
+    if (!v) {
+      return NextResponse.json({ error: "invalid name" }, { status: 400 });
+    }
+    update.name = v;
+  }
+  if ("summary" in body) {
+    const v = sanitizeText(body.summary, TEXT_LIMITS.projectSummary, {
+      allowEmpty: true,
+    });
+    update.summary = v ?? "";
+  }
+  if ("dueDate" in body) {
+    if (body.dueDate === null) {
+      update.dueDate = null;
+    } else if (
+      typeof body.dueDate === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
+    ) {
+      update.dueDate = body.dueDate;
+    } else {
+      return NextResponse.json(
+        { error: "dueDate must be YYYY-MM-DD or null" },
+        { status: 400 },
+      );
+    }
+  }
+  if ("color" in body) {
+    if (!isValidColor(body.color)) {
+      return NextResponse.json({ error: "invalid color" }, { status: 400 });
+    }
+    update.color = body.color;
+  }
+  if ("status" in body) {
+    if (!isValidProjectStatus(body.status)) {
+      return NextResponse.json(
+        { error: "invalid status" },
+        { status: 400 },
+      );
+    }
+    update.status = body.status;
+  }
+  if ("plannedMemberIds" in body) {
+    if (!isPositiveIntArray(body.plannedMemberIds)) {
+      return NextResponse.json(
+        { error: "plannedMemberIds must be number[]" },
+        { status: 400 },
+      );
+    }
+    update.plannedMemberIds = body.plannedMemberIds;
+  }
+  if ("sortOrder" in body) {
+    if (
+      typeof body.sortOrder === "number" &&
+      Number.isInteger(body.sortOrder)
+    ) {
+      update.sortOrder = body.sortOrder;
+    } else {
+      return NextResponse.json(
+        { error: "sortOrder must be integer" },
+        { status: 400 },
+      );
+    }
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "no updatable fields" }, { status: 400 });
   }
+
   const [row] = await db
     .update(schema.projects)
     .set(update)
@@ -42,8 +111,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const projectId = Number(id);
-  if (!Number.isFinite(projectId)) {
+  const projectId = toIntId(id);
+  if (!projectId) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
