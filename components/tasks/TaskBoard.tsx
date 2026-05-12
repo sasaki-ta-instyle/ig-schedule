@@ -434,18 +434,6 @@ function NewTaskInline({
       />
       <select
         className="input"
-        value={weekIso}
-        onChange={(e) => setWeekIso(e.target.value)}
-        style={{ width: 110, fontSize: ".75rem" }}
-      >
-        {weeks.map((w) => (
-          <option key={w} value={w}>
-            {w}
-          </option>
-        ))}
-      </select>
-      <select
-        className="input"
         value={assigneeId}
         onChange={(e) =>
           setAssigneeId(e.target.value === "" ? "" : Number(e.target.value))
@@ -456,6 +444,18 @@ function NewTaskInline({
         {members.map((m) => (
           <option key={m.id} value={m.id}>
             {m.name}
+          </option>
+        ))}
+      </select>
+      <select
+        className="input"
+        value={weekIso}
+        onChange={(e) => setWeekIso(e.target.value)}
+        style={{ width: 110, fontSize: ".75rem" }}
+      >
+        {weeks.map((w) => (
+          <option key={w} value={w}>
+            {w}
           </option>
         ))}
       </select>
