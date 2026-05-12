@@ -560,13 +560,13 @@ function HoursBadge({
 const moveBtnStyle: React.CSSProperties = {
   fontSize: ".625rem",
   lineHeight: 1,
-  padding: "2px 6px",
-  background: "rgba(255,255,255,.65)",
-  border: "1px solid rgba(255,255,255,.72)",
-  borderRadius: 4,
+  padding: "2px 4px",
+  background: "transparent",
+  border: "none",
   cursor: "pointer",
-  color: "var(--color-text)",
-  minWidth: 18,
+  color: "var(--color-text-muted)",
+  minWidth: 16,
+  textAlign: "center",
 };
 
 function TaskRow({
@@ -635,39 +635,35 @@ function TaskRow({
           className="edit-only"
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: 2,
+            flexDirection: "column",
+            gap: 1,
             flexShrink: 0,
           }}
         >
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: 1 }}
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            title="上へ"
+            style={moveBtnStyle}
           >
-            <button
-              type="button"
-              onClick={onMoveUp}
-              disabled={!canMoveUp}
-              title="上へ"
-              style={moveBtnStyle}
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              onClick={onMoveDown}
-              disabled={!canMoveDown}
-              title="下へ"
-              style={moveBtnStyle}
-            >
-              ▼
-            </button>
-          </div>
+            ▲
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            title="下へ"
+            style={moveBtnStyle}
+          >
+            ▼
+          </button>
           {onShiftNext && (
             <button
               type="button"
               onClick={onShiftNext}
               title="翌週へ移動"
-              style={{ ...moveBtnStyle, padding: "4px 6px" }}
+              style={moveBtnStyle}
             >
               →
             </button>
