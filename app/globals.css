@@ -341,6 +341,14 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 .is-readonly .editable-only { pointer-events: none; opacity: 0.78; }
 .is-readonly .edit-only { display: none !important; }
 
+/* ── Dashboard cell task list dividers ── */
+.cell-task-list > li {
+  padding: 4px 0;
+}
+.cell-task-list > li + li {
+  border-top: 1px solid rgba(53, 54, 45, 0.10);
+}
+
 /* ── Task board zebra ── */
 .task-list > li:nth-child(odd) {
   background: rgba(243, 241, 238, 0.55) !important;

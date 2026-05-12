@@ -366,12 +366,18 @@ export function Dashboard() {
                     backdropFilter: "saturate(180%) blur(16px)",
                     WebkitBackdropFilter: "saturate(180%) blur(16px)",
                     width: 110,
-                    padding: 0,
+                    padding: "6px 10px",
                     border: "none",
                     zIndex: 4,
+                    textAlign: "left",
+                    color: "var(--color-text-muted)",
+                    fontWeight: 600,
+                    fontSize: "1rem",
+                    letterSpacing: ".02em",
                   }}
-                  aria-hidden="true"
-                ></th>
+                >
+                  {weeks[0]?.slice(0, 4) ?? ""}
+                </th>
                 {weeks.map((w) => {
                   const hol = holidaysInWeek(w);
                   return (
@@ -480,13 +486,14 @@ export function Dashboard() {
                           onChange={(h) => setHours(m.id, w, h)}
                         />
                         <ul
+                          className="cell-task-list"
                           style={{
                             listStyle: "none",
                             margin: "8px 0 0",
                             padding: 0,
                             display: "flex",
                             flexDirection: "column",
-                            gap: 4,
+                            gap: 0,
                           }}
                         >
                           {cellTasks.map((t, idx) => (
