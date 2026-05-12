@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="t-h4"
             style={{ fontWeight: 600, letterSpacing: "-0.01em" }}
           >
-            週次スケジュール
+            プロジェクト週次スケジュール
           </strong>
         </div>
 
