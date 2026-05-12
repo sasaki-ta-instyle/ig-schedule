@@ -119,20 +119,20 @@ jobs:
             ln -sfn ${SHARED_BASE}/apps/${CATEGORY}-${APP_NAME}.env \$REL/.env.app || true
           "
 
-      - name: Run migrations (DB only)
+      - name: Run migrations (DB only, from runner)
         if: ${{ vars.USE_DB == 'true' }}
         env:
-          SHA: ${{ github.sha }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
           MIGRATE="${MIGRATE_CMD:-pnpm migrate}"
-          ssh -p ${{ secrets.CONOHA_PORT }} ${{ secrets.CONOHA_USER }}@${{ secrets.CONOHA_HOST }} "
-            set -euo pipefail
-            cd ${DEPLOY_BASE}/releases/${SHA}
-            export \$(grep -v '^#' .env.base 2>/dev/null | xargs -d '\n' || true)
-            export \$(grep -v '^#' .env.app  2>/dev/null | xargs -d '\n' || true)
-            ${MIGRATE}
-          "
+          # 標準の standalone build にはマイグレーション用ツール (tsx 等) が含まれないため、
+          # ランナー側で migrate を実行する。DATABASE_URL は repo secret から取得する想定。
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is required when USE_DB=true"
+            exit 1
+          fi
+          ${MIGRATE}
 
       - name: Atomic switch + reload
         id: switch
