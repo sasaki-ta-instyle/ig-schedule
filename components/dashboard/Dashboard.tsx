@@ -133,12 +133,36 @@ export function Dashboard() {
     const next = [...cellTasks];
     const [moved] = next.splice(index, 1);
     next.splice(target, 0, moved);
-    // セル内タスクに 0..N-1 の sortOrder を再付与
-    await Promise.all(
-      next.map((t, i) =>
-        postJson(`/api/tasks/${t.id}`, { sortOrder: i }, "PATCH"),
-      ),
+
+    // 楽観的更新: SWR キャッシュの該当タスクに即時 sortOrder を反映
+    const idToOrder = new Map(next.map((t, i) => [t.id, i] as const));
+    mutate(
+      tasksKey,
+      (prev: Task[] = []) => {
+        const updated = prev.map((t) =>
+          idToOrder.has(t.id)
+            ? { ...t, sortOrder: idToOrder.get(t.id)! }
+            : t,
+        );
+        return [...updated].sort(
+          (a, b) =>
+            a.weekIso.localeCompare(b.weekIso) ||
+            a.sortOrder - b.sortOrder ||
+            a.id - b.id,
+        );
+      },
+      { revalidate: false },
     );
+
+    try {
+      await Promise.all(
+        next.map((t, i) =>
+          postJson(`/api/tasks/${t.id}`, { sortOrder: i }, "PATCH"),
+        ),
+      );
+    } catch (e) {
+      console.error("reorder failed", e);
+    }
     mutate(tasksKey);
   }
 
@@ -443,14 +467,15 @@ function HoursBadge({
 }
 
 const moveBtnStyle: React.CSSProperties = {
-  fontSize: ".5rem",
+  fontSize: ".625rem",
   lineHeight: 1,
-  padding: "1px 4px",
-  background: "rgba(255,255,255,.55)",
-  border: "1px solid rgba(255,255,255,.62)",
+  padding: "2px 6px",
+  background: "rgba(255,255,255,.65)",
+  border: "1px solid rgba(255,255,255,.72)",
   borderRadius: 4,
   cursor: "pointer",
-  color: "var(--color-text-muted)",
+  color: "var(--color-text)",
+  minWidth: 18,
 };
 
 function TaskRow({
