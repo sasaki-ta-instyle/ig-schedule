@@ -178,12 +178,13 @@ export function TaskBoard() {
                     <p className="muted t-small">該当タスクなし</p>
                   ) : (
                     <ul
+                      className="task-list"
                       style={{
                         listStyle: "none",
                         padding: 0,
                         display: "flex",
                         flexDirection: "column",
-                        gap: 4,
+                        gap: 2,
                       }}
                     >
                       {list.map((t) => (
@@ -195,7 +196,6 @@ export function TaskBoard() {
                             alignItems: "center",
                             gap: 8,
                             padding: "6px 8px",
-                            background: "rgba(255,255,255,.32)",
                             borderRadius: "var(--r-sm)",
                           }}
                         >
