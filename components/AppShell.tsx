@@ -42,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="t-h4"
             style={{ fontWeight: 600, letterSpacing: "-0.01em" }}
           >
-            プロジェクト週次スケジュール
+            プロジェクト週次ダッシュボード
           </strong>
         </div>
 
