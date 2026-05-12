@@ -1,6 +1,8 @@
 import { db, schema } from "@/db/client";
 import { asc, isNull } from "drizzle-orm";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const rows = await db
     .select()
