@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addWeeks, currentWeekIso, weekIsoLabel, weekIsoRange } from "@/lib/week";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
@@ -16,6 +16,7 @@ type Task = {
   weekIso: string;
   done: boolean;
   notes: string | null;
+  estimatedHours: string | null;
 };
 
 const REFRESH_MS = 5000;
@@ -61,17 +62,21 @@ export function TaskBoard() {
     return m;
   }, [filtered]);
 
+  const workloadKey = `/api/workload?weekFrom=${weekFrom}&weekTo=${weekTo}`;
+
   async function toggleDone(t: Task) {
     await postJson(`/api/tasks/${t.id}`, { done: !t.done }, "PATCH");
     mutate(tasksKey);
   }
-  async function updateField(t: Task, patch: Partial<Task>) {
+  async function updateField(t: Task, patch: Record<string, unknown>) {
     await postJson(`/api/tasks/${t.id}`, patch, "PATCH");
     mutate(tasksKey);
+    mutate(workloadKey);
   }
   async function remove(t: Task) {
     await del(`/api/tasks/${t.id}`);
     mutate(tasksKey);
+    mutate(workloadKey);
   }
 
   return (
@@ -192,7 +197,8 @@ export function TaskBoard() {
                           key={t.id}
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "auto 1fr 110px 110px auto",
+                            gridTemplateColumns:
+                              "auto 1fr 110px 110px 64px auto",
                             alignItems: "center",
                             gap: 8,
                             padding: "6px 8px",
@@ -256,6 +262,11 @@ export function TaskBoard() {
                             isEdit={isEdit}
                             onChange={(w) => updateField(t, { weekIso: w })}
                           />
+                          <HoursCell
+                            value={t.estimatedHours}
+                            isEdit={isEdit}
+                            onChange={(h) => updateField(t, { estimatedHours: h })}
+                          />
                           {isEdit && (
                             <button
                               type="button"
@@ -287,6 +298,53 @@ export function TaskBoard() {
         </div>
       )}
     </section>
+  );
+}
+
+function HoursCell({
+  value,
+  isEdit,
+  onChange,
+}: {
+  value: string | null;
+  isEdit: boolean;
+  onChange: (h: number | null) => void;
+}) {
+  const initial = value == null ? "" : String(Number(value));
+  const [draft, setDraft] = useState<string>(initial);
+  useEffect(() => {
+    setDraft(initial);
+  }, [initial]);
+  if (!isEdit) {
+    return (
+      <span
+        className="t-small mono muted"
+        style={{ textAlign: "right", paddingRight: 4 }}
+      >
+        {value == null || Number(value) === 0 ? "—" : `${Number(value)}h`}
+      </span>
+    );
+  }
+  return (
+    <input
+      className="input editable-only"
+      type="number"
+      min={0}
+      max={40}
+      step={0.5}
+      value={draft}
+      placeholder="h"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft === "") {
+          if (value != null) onChange(null);
+          return;
+        }
+        const n = Number(draft);
+        if (Number.isFinite(n) && n !== Number(value ?? 0)) onChange(n);
+      }}
+      style={{ fontSize: ".75rem", padding: "4px 6px", textAlign: "right" }}
+    />
   );
 }
 
@@ -341,6 +399,7 @@ function NewTaskInline({
   const [title, setTitle] = useState("");
   const [weekIso, setWeekIso] = useState(weeks[2] ?? weeks[0]);
   const [assigneeId, setAssigneeId] = useState<number | "">("");
+  const [hours, setHours] = useState<string>("");
   return (
     <form
       className="edit-only"
@@ -353,13 +412,16 @@ function NewTaskInline({
       onSubmit={async (e) => {
         e.preventDefault();
         if (!title.trim()) return;
+        const h = hours === "" ? null : Number(hours);
         await postJson("/api/tasks", {
           projectId,
           title: title.trim(),
           weekIso,
           assigneeMemberId: assigneeId === "" ? null : assigneeId,
+          estimatedHours: h != null && Number.isFinite(h) ? h : null,
         });
         setTitle("");
+        setHours("");
         onCreated();
       }}
     >
@@ -397,6 +459,17 @@ function NewTaskInline({
           </option>
         ))}
       </select>
+      <input
+        className="input"
+        type="number"
+        min={0}
+        max={40}
+        step={0.5}
+        placeholder="h"
+        value={hours}
+        onChange={(e) => setHours(e.target.value)}
+        style={{ width: 56, fontSize: ".75rem", textAlign: "right" }}
+      />
       <button type="submit" className="btn btn-secondary btn-sm">
         追加
       </button>

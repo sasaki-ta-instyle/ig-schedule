@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   clampHours,
@@ -8,6 +8,106 @@ import {
   TEXT_LIMITS,
   toIntId,
 } from "@/lib/validate";
+
+type Bucket = {
+  memberId: number;
+  weekIso: string;
+  hours: number;
+};
+
+function contributionOf(
+  assigneeMemberId: number | null,
+  weekIso: string | null,
+  estimatedHours: number | null,
+): Bucket | null {
+  if (
+    !assigneeMemberId ||
+    !weekIso ||
+    !estimatedHours ||
+    !Number.isFinite(estimatedHours) ||
+    estimatedHours <= 0
+  ) {
+    return null;
+  }
+  return { memberId: assigneeMemberId, weekIso, hours: estimatedHours };
+}
+
+async function adjustWorkload(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  add: Bucket | null,
+  subtract: Bucket | null,
+) {
+  // 同じバケットなら差分計算で 1 行だけ更新
+  if (
+    add &&
+    subtract &&
+    add.memberId === subtract.memberId &&
+    add.weekIso === subtract.weekIso
+  ) {
+    const delta = add.hours - subtract.hours;
+    if (delta === 0) return;
+    if (delta > 0) {
+      await tx
+        .insert(schema.workload)
+        .values({
+          memberId: add.memberId,
+          weekIso: add.weekIso,
+          plannedHours: delta.toString(),
+        })
+        .onConflictDoUpdate({
+          target: [schema.workload.memberId, schema.workload.weekIso],
+          set: {
+            plannedHours: sql`${schema.workload.plannedHours} + ${delta}`,
+            updatedAt: sql`now()`,
+          },
+        });
+    } else {
+      await tx
+        .update(schema.workload)
+        .set({
+          plannedHours: sql`GREATEST(0, ${schema.workload.plannedHours}::numeric - ${Math.abs(delta)})`,
+          updatedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(schema.workload.memberId, add.memberId),
+            eq(schema.workload.weekIso, add.weekIso),
+          ),
+        );
+    }
+    return;
+  }
+  if (subtract) {
+    await tx
+      .update(schema.workload)
+      .set({
+        plannedHours: sql`GREATEST(0, ${schema.workload.plannedHours}::numeric - ${subtract.hours})`,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(schema.workload.memberId, subtract.memberId),
+          eq(schema.workload.weekIso, subtract.weekIso),
+        ),
+      );
+  }
+  if (add) {
+    await tx
+      .insert(schema.workload)
+      .values({
+        memberId: add.memberId,
+        weekIso: add.weekIso,
+        plannedHours: add.hours.toString(),
+      })
+      .onConflictDoUpdate({
+        target: [schema.workload.memberId, schema.workload.weekIso],
+        set: {
+          plannedHours: sql`${schema.workload.plannedHours} + ${add.hours}`,
+          updatedAt: sql`now()`,
+        },
+      });
+  }
+}
 
 export async function PATCH(
   req: Request,
@@ -109,13 +209,61 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const [row] = await db
-    .update(schema.tasks)
-    .set(update)
-    .where(eq(schema.tasks.id, taskId))
-    .returning();
-  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json(row);
+
+  // workload 影響フィールドが変わったときだけトランザクション + 差分調整
+  const affectsWorkload =
+    "estimatedHours" in body ||
+    "assigneeMemberId" in body ||
+    "weekIso" in body;
+
+  try {
+    const row = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, taskId))
+        .limit(1);
+      if (!current) throw new Error("TASK_NOT_FOUND");
+
+      const oldBucket = contributionOf(
+        current.assigneeMemberId,
+        current.weekIso,
+        current.estimatedHours == null ? null : Number(current.estimatedHours),
+      );
+
+      const newAssignee =
+        "assigneeMemberId" in update
+          ? (update.assigneeMemberId as number | null)
+          : current.assigneeMemberId;
+      const newWeek =
+        "weekIso" in update
+          ? (update.weekIso as string)
+          : current.weekIso;
+      const newHoursStr =
+        "estimatedHours" in update
+          ? (update.estimatedHours as string | null)
+          : current.estimatedHours;
+      const newHours = newHoursStr == null ? null : Number(newHoursStr);
+      const newBucket = contributionOf(newAssignee, newWeek, newHours);
+
+      if (affectsWorkload) {
+        await adjustWorkload(tx, newBucket, oldBucket);
+      }
+
+      const [updated] = await tx
+        .update(schema.tasks)
+        .set(update)
+        .where(eq(schema.tasks.id, taskId))
+        .returning();
+      return updated;
+    });
+    return NextResponse.json(row);
+  } catch (e) {
+    if ((e as Error).message === "TASK_NOT_FOUND") {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    throw e;
+  }
 }
 
 export async function DELETE(
@@ -127,6 +275,29 @@ export async function DELETE(
   if (!taskId) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
-  await db.delete(schema.tasks).where(eq(schema.tasks.id, taskId));
-  return NextResponse.json({ ok: true });
+  try {
+    await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, taskId))
+        .limit(1);
+      if (!current) throw new Error("TASK_NOT_FOUND");
+      const bucket = contributionOf(
+        current.assigneeMemberId,
+        current.weekIso,
+        current.estimatedHours == null ? null : Number(current.estimatedHours),
+      );
+      if (bucket) {
+        await adjustWorkload(tx, null, bucket);
+      }
+      await tx.delete(schema.tasks).where(eq(schema.tasks.id, taskId));
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    if ((e as Error).message === "TASK_NOT_FOUND") {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    throw e;
+  }
 }

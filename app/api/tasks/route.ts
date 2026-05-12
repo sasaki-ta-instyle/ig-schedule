@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { and, asc, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, gte, inArray, lte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   clampHours,
@@ -92,18 +92,43 @@ export async function POST(req: Request) {
       ? (body.sortOrder as number)
       : 0;
 
-  const [row] = await db
-    .insert(schema.tasks)
-    .values({
-      projectId,
-      title,
-      weekIso: body.weekIso as string,
-      assigneeMemberId,
-      notes,
-      estimatedHours:
-        estimatedHours == null ? null : estimatedHours.toString(),
-      sortOrder,
-    })
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(schema.tasks)
+      .values({
+        projectId,
+        title,
+        weekIso: body.weekIso as string,
+        assigneeMemberId,
+        notes,
+        estimatedHours:
+          estimatedHours == null ? null : estimatedHours.toString(),
+        sortOrder,
+      })
+      .returning();
+
+    if (
+      assigneeMemberId &&
+      estimatedHours != null &&
+      estimatedHours > 0
+    ) {
+      await tx
+        .insert(schema.workload)
+        .values({
+          memberId: assigneeMemberId,
+          weekIso: body.weekIso as string,
+          plannedHours: estimatedHours.toString(),
+        })
+        .onConflictDoUpdate({
+          target: [schema.workload.memberId, schema.workload.weekIso],
+          set: {
+            plannedHours: sql`${schema.workload.plannedHours} + ${estimatedHours}`,
+            updatedAt: sql`now()`,
+          },
+        });
+    }
+
+    return inserted;
+  });
   return NextResponse.json(row, { status: 201 });
 }
