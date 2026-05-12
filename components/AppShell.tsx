@@ -18,11 +18,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className={`page-wrap ${isReadonly ? "is-readonly" : ""}`}>
       <header
         style={{
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
           alignItems: "center",
           gap: 20,
           padding: "20px 32px",
-          flexWrap: "wrap",
         }}
       >
         <div
@@ -31,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             flexDirection: "column",
             alignItems: "flex-start",
             gap: 6,
+            justifySelf: "start",
           }}
         >
           <img
@@ -46,7 +47,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </strong>
         </div>
 
-        <nav className="tabs" style={{ marginLeft: 32 }}>
+        <nav className="tabs" style={{ justifySelf: "center" }}>
           {NAV.map((item) => {
             const active =
               item.href === "/"
@@ -64,9 +65,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div style={{ flex: 1 }} />
-
-        <div className="mode-toggle" role="group" aria-label="モード切替">
+        <div
+          className="mode-toggle"
+          role="group"
+          aria-label="モード切替"
+          style={{ justifySelf: "end" }}
+        >
           <button
             type="button"
             aria-pressed={mode === "preview"}
