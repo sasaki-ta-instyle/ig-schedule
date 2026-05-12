@@ -370,10 +370,10 @@ export function Dashboard() {
                     border: "none",
                     zIndex: 4,
                     textAlign: "left",
-                    color: "var(--color-text-muted)",
+                    color: "var(--color-text)",
                     fontWeight: 600,
-                    fontSize: "1rem",
-                    letterSpacing: ".02em",
+                    fontSize: ".8125rem",
+                    letterSpacing: "-0.01em",
                   }}
                 >
                   {weeks[0]?.slice(0, 4) ?? ""}
