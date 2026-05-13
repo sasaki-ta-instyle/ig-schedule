@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
+import { useEffect, useState } from "react";
 import { del, fetcher, postJson } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 
@@ -29,13 +30,38 @@ function fmtDate(iso: string | null): string {
 export function ArchivedProjectsPanel() {
   const { isEdit } = useEditMode();
   const { data: projects } = useSWR<Project[]>(ARCHIVED_KEY, fetcher);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!isEdit) setSelectedIds(new Set());
+  }, [isEdit]);
+
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function selectAll() {
+    setSelectedIds(new Set((projects ?? []).map((p) => p.id)));
+  }
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function revalidateAll() {
+    mutate(ARCHIVED_KEY);
+    mutate("/api/projects");
+    mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
+    mutate((key) => typeof key === "string" && key.startsWith("/api/workload"));
+  }
 
   async function restoreProject(p: Project) {
     if (!confirm(`「${p.name}」をアクティブに戻します。`)) return;
     await postJson(`/api/projects/${p.id}/unarchive`, {});
-    mutate(ARCHIVED_KEY);
-    mutate("/api/projects");
-    mutate((key) => typeof key === "string" && key.startsWith("/api/workload"));
+    revalidateAll();
   }
 
   async function deleteProject(p: Project) {
@@ -46,9 +72,41 @@ export function ArchivedProjectsPanel() {
     )
       return;
     await del(`/api/projects/${p.id}`);
-    mutate(ARCHIVED_KEY);
-    mutate("/api/projects");
-    mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
+    revalidateAll();
+  }
+
+  async function bulkRestore() {
+    const targets = (projects ?? []).filter((p) => selectedIds.has(p.id));
+    if (targets.length === 0) return;
+    if (!confirm(`選択中の ${targets.length} 件をアクティブに戻します。`)) return;
+    for (const p of targets) {
+      try {
+        await postJson(`/api/projects/${p.id}/unarchive`, {});
+      } catch (e) {
+        console.error("unarchive failed", p.id, e);
+      }
+    }
+    clearSelection();
+    revalidateAll();
+  }
+  async function bulkDelete() {
+    const targets = (projects ?? []).filter((p) => selectedIds.has(p.id));
+    if (targets.length === 0) return;
+    if (
+      !confirm(
+        `選択中の ${targets.length} 件を完全に削除します。\n関連するタスクもすべて削除され、復元できません。本当に削除しますか？`,
+      )
+    )
+      return;
+    for (const p of targets) {
+      try {
+        await del(`/api/projects/${p.id}`);
+      } catch (e) {
+        console.error("delete failed", p.id, e);
+      }
+    }
+    clearSelection();
+    revalidateAll();
   }
 
   return (
@@ -65,6 +123,61 @@ export function ArchivedProjectsPanel() {
         )}
       </header>
 
+      {isEdit && (projects?.length ?? 0) > 0 && (
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+            padding: "8px 12px",
+            marginBottom: 12,
+            background: "rgba(255,255,255,.42)",
+            border: "1px solid rgba(255,255,255,.6)",
+            borderRadius: "var(--r-sm)",
+          }}
+        >
+          <span className="t-small" style={{ fontWeight: 600 }}>
+            {selectedIds.size > 0
+              ? `${selectedIds.size} 件選択中`
+              : "複数選択して一括操作"}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={
+              selectedIds.size === (projects?.length ?? 0)
+                ? clearSelection
+                : selectAll
+            }
+            style={{ fontSize: ".75rem" }}
+          >
+            {selectedIds.size === (projects?.length ?? 0)
+              ? "選択解除"
+              : "すべて選択"}
+          </button>
+          <div style={{ flex: 1 }} />
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={bulkRestore}
+            disabled={selectedIds.size === 0}
+            style={{ fontSize: ".75rem" }}
+          >
+            一括復元
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={bulkDelete}
+            disabled={selectedIds.size === 0}
+            style={{ fontSize: ".75rem", color: "var(--color-error)" }}
+          >
+            一括削除
+          </button>
+        </div>
+      )}
+
       {!projects ? (
         <p className="muted">読み込み中…</p>
       ) : projects.length === 0 ? (
@@ -79,7 +192,9 @@ export function ArchivedProjectsPanel() {
             gap: 8,
           }}
         >
-          {projects.map((p) => (
+          {projects.map((p) => {
+            const selected = selectedIds.has(p.id);
+            return (
             <li
               key={p.id}
               className="glass-card"
@@ -87,12 +202,25 @@ export function ArchivedProjectsPanel() {
                 padding: "10px 14px",
                 display: "grid",
                 gridTemplateColumns: isEdit
-                  ? "auto 1fr auto auto auto"
+                  ? "auto auto 1fr auto auto auto"
                   : "auto 1fr auto",
                 gap: 10,
                 alignItems: "center",
+                outline: selected
+                  ? "2px solid var(--color-accent, #38537B)"
+                  : "none",
+                outlineOffset: -2,
               }}
             >
+              {isEdit && (
+                <input
+                  type="checkbox"
+                  className="checkbox"
+                  checked={selected}
+                  onChange={() => toggleSelected(p.id)}
+                  aria-label={`${p.name} を選択`}
+                />
+              )}
               <span
                 style={{
                   width: 12,
@@ -135,7 +263,8 @@ export function ArchivedProjectsPanel() {
                 </>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </section>

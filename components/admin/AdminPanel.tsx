@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { ProjectCreateModal } from "./ProjectCreateModal";
@@ -33,6 +33,73 @@ export function AdminPanel() {
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // 編集モードを抜けたら選択をクリア
+  useEffect(() => {
+    if (!isEdit) setSelectedIds(new Set());
+  }, [isEdit]);
+
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function selectAll() {
+    setSelectedIds(new Set((projects ?? []).map((p) => p.id)));
+  }
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function revalidateAll() {
+    mutate("/api/projects");
+    mutate((key) => typeof key === "string" && key.startsWith("/api/projects?archived"));
+    mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
+    mutate((key) => typeof key === "string" && key.startsWith("/api/workload"));
+  }
+
+  async function bulkArchive() {
+    const targets = (projects ?? []).filter((p) => selectedIds.has(p.id));
+    if (targets.length === 0) return;
+    if (
+      !confirm(
+        `選択中の ${targets.length} 件をアーカイブします。\nダッシュボードからは消えますが、アーカイブページから復元できます。`,
+      )
+    )
+      return;
+    for (const p of targets) {
+      try {
+        await postJson(`/api/projects/${p.id}/archive`, {});
+      } catch (e) {
+        console.error("archive failed", p.id, e);
+      }
+    }
+    clearSelection();
+    revalidateAll();
+  }
+  async function bulkDelete() {
+    const targets = (projects ?? []).filter((p) => selectedIds.has(p.id));
+    if (targets.length === 0) return;
+    if (
+      !confirm(
+        `選択中の ${targets.length} 件を完全に削除します。\n関連するタスク・工数もすべて削除され、復元できません。本当に削除しますか？`,
+      )
+    )
+      return;
+    for (const p of targets) {
+      try {
+        await del(`/api/projects/${p.id}`);
+      } catch (e) {
+        console.error("delete failed", p.id, e);
+      }
+    }
+    clearSelection();
+    revalidateAll();
+  }
 
   async function updateProject(p: Project, patch: Partial<Project>) {
     mutate(
@@ -111,6 +178,61 @@ export function AdminPanel() {
         </div>
       </header>
 
+      {isEdit && (projects?.length ?? 0) > 0 && (
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+            padding: "8px 12px",
+            marginBottom: 12,
+            background: "rgba(255,255,255,.42)",
+            border: "1px solid rgba(255,255,255,.6)",
+            borderRadius: "var(--r-sm)",
+          }}
+        >
+          <span className="t-small" style={{ fontWeight: 600 }}>
+            {selectedIds.size > 0
+              ? `${selectedIds.size} 件選択中`
+              : "複数選択して一括操作"}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={
+              selectedIds.size === (projects?.length ?? 0)
+                ? clearSelection
+                : selectAll
+            }
+            style={{ fontSize: ".75rem" }}
+          >
+            {selectedIds.size === (projects?.length ?? 0)
+              ? "選択解除"
+              : "すべて選択"}
+          </button>
+          <div style={{ flex: 1 }} />
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={bulkArchive}
+            disabled={selectedIds.size === 0}
+            style={{ fontSize: ".75rem" }}
+          >
+            一括アーカイブ
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={bulkDelete}
+            disabled={selectedIds.size === 0}
+            style={{ fontSize: ".75rem", color: "var(--color-error)" }}
+          >
+            一括削除
+          </button>
+        </div>
+      )}
+
       {!projects ? (
         <p className="muted">読み込み中…</p>
       ) : projects.length === 0 ? (
@@ -134,6 +256,8 @@ export function AdminPanel() {
               project={p}
               members={members ?? []}
               isEdit={isEdit}
+              selected={selectedIds.has(p.id)}
+              onToggleSelected={() => toggleSelected(p.id)}
               onUpdate={(patch) => updateProject(p, patch)}
               onToggleMember={(id) => togglePlannedMember(p, id)}
               onArchive={() => archiveProject(p)}
@@ -166,6 +290,8 @@ function ProjectRow({
   project: p,
   members,
   isEdit,
+  selected,
+  onToggleSelected,
   onUpdate,
   onToggleMember,
   onArchive,
@@ -174,6 +300,8 @@ function ProjectRow({
   project: Project;
   members: Member[];
   isEdit: boolean;
+  selected: boolean;
+  onToggleSelected: () => void;
   onUpdate: (patch: Partial<Project>) => void | Promise<void>;
   onToggleMember: (memberId: number) => void | Promise<void>;
   onArchive: () => void | Promise<void>;
@@ -184,17 +312,34 @@ function ProjectRow({
   for (const m of members) memberById[m.id] = m;
 
   return (
-    <li className="glass-card" style={{ padding: 14 }}>
+    <li
+      className="glass-card"
+      style={{
+        padding: 14,
+        outline: selected ? "2px solid var(--color-accent, #38537B)" : "none",
+        outlineOffset: -2,
+      }}
+    >
       <div
         style={{
           display: "grid",
           gridTemplateColumns: isEdit
-            ? "auto 1fr 140px auto auto auto"
+            ? "auto auto 1fr 140px auto auto auto"
             : "auto 1fr 140px auto",
           gap: 10,
           alignItems: "center",
         }}
       >
+        {isEdit && (
+          <input
+            type="checkbox"
+            className="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            title="一括操作の対象に追加"
+            aria-label={`${p.name} を選択`}
+          />
+        )}
         {isEdit ? (
           <input
             type="color"
@@ -295,7 +440,7 @@ function ProjectRow({
           flexWrap: "wrap",
           gap: 4,
           marginTop: 8,
-          paddingLeft: 38,
+          paddingLeft: isEdit ? 64 : 38,
         }}
       >
         {(isEdit ? members : p.plannedMemberIds.map((id) => memberById[id]).filter(Boolean)).map(
@@ -342,7 +487,7 @@ function ProjectRow({
 
       {/* 概要（詳細展開時、編集モード時は textarea） */}
       {expanded && (
-        <div style={{ marginTop: 10, paddingLeft: 38 }}>
+        <div style={{ marginTop: 10, paddingLeft: isEdit ? 64 : 38 }}>
           <label className="form-label" style={{ fontSize: ".6875rem" }}>
             概要
           </label>
