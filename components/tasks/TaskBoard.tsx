@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addWeeks, currentWeekIso, weekIsoLabel, weekIsoRange } from "@/lib/week";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
+import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 
 type Member = { id: number; name: string; color: string };
 type Project = { id: number; name: string; color: string; status: string };
@@ -386,6 +387,16 @@ function WeekPicker({
   );
 }
 
+type NewTaskDraft = {
+  title: string;
+  weekIso: string;
+  assigneeId: number | "";
+  hours: string;
+};
+const NEW_TASK_DRAFT_VERSION = 1;
+const newTaskDraftKey = (projectId: number) =>
+  `ig-schedule:draft:new-task:${projectId}`;
+
 function NewTaskInline({
   projectId,
   members,
@@ -397,10 +408,29 @@ function NewTaskInline({
   weeks: string[];
   onCreated: () => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [weekIso, setWeekIso] = useState(weeks[2] ?? weeks[0]);
-  const [assigneeId, setAssigneeId] = useState<number | "">("");
-  const [hours, setHours] = useState<string>("");
+  const draftKey = newTaskDraftKey(projectId);
+  const [initial] = useState<NewTaskDraft | null>(() =>
+    restoreDraft<NewTaskDraft>(draftKey, NEW_TASK_DRAFT_VERSION),
+  );
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [weekIso, setWeekIso] = useState(
+    initial?.weekIso ?? weeks[2] ?? weeks[0],
+  );
+  const [assigneeId, setAssigneeId] = useState<number | "">(
+    initial?.assigneeId ?? "",
+  );
+  const [hours, setHours] = useState<string>(initial?.hours ?? "");
+
+  const snapshot = useMemo<NewTaskDraft>(
+    () => ({ title, weekIso, assigneeId, hours }),
+    [title, weekIso, assigneeId, hours],
+  );
+  const { clear: clearStoredDraft } = useAutosaveDraft(
+    draftKey,
+    NEW_TASK_DRAFT_VERSION,
+    snapshot,
+  );
+
   return (
     <form
       className="edit-only"
@@ -423,6 +453,7 @@ function NewTaskInline({
         });
         setTitle("");
         setHours("");
+        clearStoredDraft();
         onCreated();
       }}
     >

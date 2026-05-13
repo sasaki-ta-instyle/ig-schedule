@@ -13,6 +13,7 @@ import { holidaysInWeek } from "@/lib/holidays";
 import { WORK_RULES } from "@/lib/work-rules";
 import { fetcher, postJson } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
+import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 
 type Member = {
   id: number;
@@ -595,6 +596,8 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                           )}
                         {isEdit && (projects?.length ?? 0) > 0 && (
                           <QuickAdd
+                            memberId={m.id}
+                            weekIso={w}
                             projects={projects ?? []}
                             onAdd={(projectId, title) =>
                               addQuickTask(m.id, w, projectId, title)
@@ -823,15 +826,41 @@ function TaskRow({
   );
 }
 
+type QuickAddDraft = { projectId: number; title: string };
+const QUICK_ADD_DRAFT_VERSION = 1;
+const quickAddDraftKey = (memberId: number, weekIso: string) =>
+  `ig-schedule:draft:quick-add:${memberId}:${weekIso}`;
+
 function QuickAdd({
+  memberId,
+  weekIso,
   projects,
   onAdd,
 }: {
+  memberId: number;
+  weekIso: string;
   projects: Project[];
   onAdd: (projectId: number, title: string) => void;
 }) {
-  const [projectId, setProjectId] = useState<number>(projects[0]?.id ?? 0);
-  const [title, setTitle] = useState("");
+  const draftKey = quickAddDraftKey(memberId, weekIso);
+  const [initial] = useState<QuickAddDraft | null>(() =>
+    restoreDraft<QuickAddDraft>(draftKey, QUICK_ADD_DRAFT_VERSION),
+  );
+  const [projectId, setProjectId] = useState<number>(
+    initial?.projectId ?? projects[0]?.id ?? 0,
+  );
+  const [title, setTitle] = useState(initial?.title ?? "");
+
+  const snapshot = useMemo<QuickAddDraft>(
+    () => ({ projectId, title }),
+    [projectId, title],
+  );
+  const { clear: clearStoredDraft } = useAutosaveDraft(
+    draftKey,
+    QUICK_ADD_DRAFT_VERSION,
+    snapshot,
+  );
+
   return (
     <form
       className="edit-only"
@@ -841,6 +870,7 @@ function QuickAdd({
         if (title.trim() && projectId) {
           onAdd(projectId, title);
           setTitle("");
+          clearStoredDraft();
         }
       }}
     >

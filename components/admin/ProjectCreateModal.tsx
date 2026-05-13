@@ -8,6 +8,7 @@ import {
   weekIsoLabel,
   weekIsoRange,
 } from "@/lib/week";
+import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 
 type Member = { id: number; name: string; color: string };
 
@@ -18,6 +19,19 @@ type DraftTask = {
   notes: string | null;
   estimatedHours: number | null;
 };
+
+type StoredProjectDraft = {
+  name: string;
+  summary: string;
+  dueDate: string;
+  color: string;
+  plannedMemberIds: number[];
+  drafts: DraftTask[];
+  rationale: string;
+};
+
+const DRAFT_KEY = "ig-schedule:draft:project-create";
+const DRAFT_VERSION = 1;
 
 type GenerateResponse = {
   tasks: DraftTask[];
@@ -43,16 +57,32 @@ export function ProjectCreateModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [summary, setSummary] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [color, setColor] = useState(COLORS[0]);
-  const [plannedMemberIds, setPlannedMemberIds] = useState<number[]>([]);
-  const [drafts, setDrafts] = useState<DraftTask[]>([]);
-  const [rationale, setRationale] = useState<string>("");
+  const [initial] = useState<StoredProjectDraft | null>(() =>
+    restoreDraft<StoredProjectDraft>(DRAFT_KEY, DRAFT_VERSION),
+  );
+  const [name, setName] = useState(initial?.name ?? "");
+  const [summary, setSummary] = useState(initial?.summary ?? "");
+  const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
+  const [color, setColor] = useState(initial?.color ?? COLORS[0]);
+  const [plannedMemberIds, setPlannedMemberIds] = useState<number[]>(
+    initial?.plannedMemberIds ?? [],
+  );
+  const [drafts, setDrafts] = useState<DraftTask[]>(initial?.drafts ?? []);
+  const [rationale, setRationale] = useState<string>(initial?.rationale ?? "");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const draftSnapshot = useMemo<StoredProjectDraft>(
+    () => ({ name, summary, dueDate, color, plannedMemberIds, drafts, rationale }),
+    [name, summary, dueDate, color, plannedMemberIds, drafts, rationale],
+  );
+  const { clear: clearStoredDraft } = useAutosaveDraft(
+    DRAFT_KEY,
+    DRAFT_VERSION,
+    draftSnapshot,
+    { skip: saving },
+  );
 
   const weekOptions = useMemo(() => {
     const start = addWeeks(currentWeekIso(), -2);
@@ -113,6 +143,7 @@ export function ProjectCreateModal({
           ? { summary: summary.trim(), dueDate: dueDate || undefined, plannedMemberIds }
           : null,
       });
+      clearStoredDraft();
       onCreated();
     } catch (e) {
       setAiError((e as Error).message);
