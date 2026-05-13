@@ -3,6 +3,7 @@ export const COMPANIES = [
   "西村さん",
   "人事",
   "労務",
+  "アプリ",
   "メビウス",
   "イルムス",
   "VERITE",
