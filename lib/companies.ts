@@ -1,6 +1,8 @@
 export const COMPANIES = [
   "IG",
   "西村さん",
+  "人事",
+  "労務",
   "メビウス",
   "イルムス",
   "VERITE",
@@ -16,6 +18,7 @@ export const COMPANIES = [
   "Alouette",
   "マルゴット",
   "FEARLESS",
+  "LtOVES",
 ] as const;
 
 export type Company = (typeof COMPANIES)[number];
