@@ -9,6 +9,7 @@ import {
   weekIsoRange,
 } from "@/lib/week";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
+import { COMPANIES, type Company } from "@/lib/companies";
 
 type Member = { id: number; name: string; color: string };
 
@@ -23,6 +24,7 @@ type DraftTask = {
 type StoredProjectDraft = {
   name: string;
   summary: string;
+  company: Company | "";
   dueDate: string;
   color: string;
   plannedMemberIds: number[];
@@ -62,6 +64,7 @@ export function ProjectCreateModal({
   );
   const [name, setName] = useState(initial?.name ?? "");
   const [summary, setSummary] = useState(initial?.summary ?? "");
+  const [company, setCompany] = useState<Company | "">(initial?.company ?? "");
   const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
   const [color, setColor] = useState(initial?.color ?? COLORS[0]);
   const [plannedMemberIds, setPlannedMemberIds] = useState<number[]>(
@@ -74,8 +77,8 @@ export function ProjectCreateModal({
   const [aiError, setAiError] = useState<string | null>(null);
 
   const draftSnapshot = useMemo<StoredProjectDraft>(
-    () => ({ name, summary, dueDate, color, plannedMemberIds, drafts, rationale }),
-    [name, summary, dueDate, color, plannedMemberIds, drafts, rationale],
+    () => ({ name, summary, company, dueDate, color, plannedMemberIds, drafts, rationale }),
+    [name, summary, company, dueDate, color, plannedMemberIds, drafts, rationale],
   );
   const { clear: clearStoredDraft } = useAutosaveDraft(
     DRAFT_KEY,
@@ -135,6 +138,7 @@ export function ProjectCreateModal({
       await postJson("/api/projects", {
         name: name.trim(),
         summary: summary.trim(),
+        company: company || null,
         dueDate: dueDate || null,
         color,
         plannedMemberIds,
@@ -242,6 +246,23 @@ export function ProjectCreateModal({
               />
             </div>
             <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">会社タグ</label>
+                <select
+                  className="input"
+                  value={company}
+                  onChange={(e) =>
+                    setCompany(e.target.value as Company | "")
+                  }
+                >
+                  <option value="">（未設定）</option>
+                  {COMPANIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div style={{ flex: 1 }}>
                 <label className="form-label">期日</label>
                 <input

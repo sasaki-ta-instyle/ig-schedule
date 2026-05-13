@@ -14,6 +14,8 @@ import { WORK_RULES } from "@/lib/work-rules";
 import { fetcher, postJson } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
+import type { Company } from "@/lib/companies";
+import { CompanyChip } from "@/components/CompanyChip";
 
 type Member = {
   id: number;
@@ -45,6 +47,7 @@ type Project = {
   name: string;
   color: string;
   status: string;
+  company: Company | null;
 };
 
 const WEEK_COUNT = 6;
@@ -747,6 +750,11 @@ function TaskRow({
         disabled={!isEdit}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
+        {project?.company && (
+          <span style={{ marginRight: 5, verticalAlign: "middle" }}>
+            <CompanyChip company={project.company} size="xs" />
+          </span>
+        )}
         {project && (
           <span
             style={{

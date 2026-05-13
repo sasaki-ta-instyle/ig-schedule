@@ -11,6 +11,7 @@ import {
   TEXT_LIMITS,
   toIntId,
 } from "@/lib/validate";
+import { isKnownCompany } from "@/lib/companies";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
       : null;
   const color = isValidColor(body.color) ? body.color : "#38537B";
   const status = isValidProjectStatus(body.status) ? body.status : "active";
+  const company = isKnownCompany(body.company) ? body.company : null;
   const plannedMemberIds = isPositiveIntArray(body.plannedMemberIds)
     ? (body.plannedMemberIds as number[])
     : [];
@@ -128,6 +130,7 @@ export async function POST(req: Request) {
       .values({
         name,
         summary,
+        company,
         dueDate,
         color,
         status,

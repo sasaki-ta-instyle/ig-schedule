@@ -24,6 +24,7 @@ export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   summary: text("summary").notNull().default(""),
+  company: text("company"),
   dueDate: date("due_date"),
   color: text("color").notNull().default("#38537B"),
   status: text("status").notNull().default("active"),

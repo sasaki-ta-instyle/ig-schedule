@@ -4,11 +4,14 @@ import useSWR, { mutate } from "swr";
 import { useEffect, useState } from "react";
 import { del, fetcher, postJson } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
+import type { Company } from "@/lib/companies";
+import { CompanyChip } from "@/components/CompanyChip";
 
 type Project = {
   id: number;
   name: string;
   summary: string;
+  company: Company | null;
   dueDate: string | null;
   color: string;
   status: string;
@@ -231,7 +234,10 @@ export function ArchivedProjectsPanel() {
                 }}
               />
               <div>
-                <strong>{p.name}</strong>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <strong>{p.name}</strong>
+                  {p.company && <CompanyChip company={p.company} size="xs" />}
+                </div>
                 {p.summary && (
                   <div className="t-small muted" style={{ marginTop: 2 }}>
                     {p.summary}

@@ -9,6 +9,7 @@ import {
   TEXT_LIMITS,
   toIntId,
 } from "@/lib/validate";
+import { isKnownCompany } from "@/lib/companies";
 import {
   collectWorkloadBuckets,
   recomputeWorkloadBuckets,
@@ -64,6 +65,15 @@ export async function PATCH(
       return NextResponse.json({ error: "invalid color" }, { status: 400 });
     }
     update.color = body.color;
+  }
+  if ("company" in body) {
+    if (body.company === null || body.company === "") {
+      update.company = null;
+    } else if (isKnownCompany(body.company)) {
+      update.company = body.company;
+    } else {
+      return NextResponse.json({ error: "invalid company" }, { status: 400 });
+    }
   }
   if ("status" in body) {
     if (!isValidProjectStatus(body.status)) {

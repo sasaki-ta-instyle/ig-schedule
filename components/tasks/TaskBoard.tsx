@@ -6,9 +6,17 @@ import { addWeeks, currentWeekIso, weekIsoLabel, weekIsoRange } from "@/lib/week
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
+import type { Company } from "@/lib/companies";
+import { CompanyChip } from "@/components/CompanyChip";
 
 type Member = { id: number; name: string; color: string };
-type Project = { id: number; name: string; color: string; status: string };
+type Project = {
+  id: number;
+  name: string;
+  color: string;
+  status: string;
+  company: Company | null;
+};
 type Task = {
   id: number;
   projectId: number;
@@ -176,6 +184,7 @@ export function TaskBoard() {
                     <strong className="t-h4" style={{ fontSize: "1rem" }}>
                       {p.name}
                     </strong>
+                    {p.company && <CompanyChip company={p.company} size="sm" />}
                     <span className="muted t-small">
                       ({list.filter((t) => t.done).length}/{list.length})
                     </span>

@@ -5,12 +5,15 @@ import { useEffect, useState } from "react";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { ProjectCreateModal } from "./ProjectCreateModal";
+import { COMPANIES, type Company } from "@/lib/companies";
+import { CompanyChip } from "@/components/CompanyChip";
 
 type Member = { id: number; name: string; color: string };
 type Project = {
   id: number;
   name: string;
   summary: string;
+  company: Company | null;
   dueDate: string | null;
   color: string;
   status: string;
@@ -348,8 +351,8 @@ function ProjectRow({
         style={{
           display: "grid",
           gridTemplateColumns: isEdit
-            ? "auto auto 1fr 140px auto auto auto"
-            : "auto 1fr 140px auto",
+            ? "auto auto 1fr 120px 140px auto auto auto"
+            : "auto 1fr auto 140px auto",
           gap: 10,
           alignItems: "center",
         }}
@@ -406,6 +409,28 @@ function ProjectRow({
           />
         ) : (
           <strong>{p.name}</strong>
+        )}
+
+        {isEdit ? (
+          <select
+            className="input editable-only"
+            value={p.company ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              onUpdate({ company: (v === "" ? null : (v as Company)) });
+            }}
+            style={{ fontSize: ".75rem" }}
+            title="会社タグ"
+          >
+            <option value="">（未設定）</option>
+            {COMPANIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <CompanyChip company={p.company} />
         )}
 
         {isEdit ? (
