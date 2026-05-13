@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEditMode } from "@/hooks/useEditMode";
 import { PasswordPrompt } from "./PasswordPrompt";
 
-const NAV = [
+const NAV: Array<{ href: string; label: string; editOnly?: boolean }> = [
   { href: "/", label: "ダッシュボード" },
   { href: "/tasks", label: "タスクボード" },
   { href: "/admin", label: "プロジェクト管理" },
+  { href: "/archived", label: "アーカイブ", editOnly: true },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -17,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     mode,
     setMode,
     isReadonly,
+    isEdit,
     promptOpen,
     pending,
     error,
@@ -65,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="tabs" style={{ justifySelf: "center" }}>
-          {NAV.map((item) => {
+          {NAV.filter((item) => !item.editOnly || isEdit).map((item) => {
             const active =
               item.href === "/"
                 ? pathname === "/"

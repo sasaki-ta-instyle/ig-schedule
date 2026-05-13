@@ -49,8 +49,10 @@ type Project = {
 const WEEK_COUNT = 6;
 const REFRESH_MS = 5000;
 
-export function Dashboard() {
-  const { isEdit } = useEditMode();
+export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
+  const { isEdit: editToggled } = useEditMode();
+  // アーカイブビューでは閲覧専用に固定する
+  const isEdit = editToggled && !archived;
   const [anchorWeek, setAnchorWeek] = useState<string>(currentWeekIso());
   const weeks = useMemo(() => weekIsoRange(anchorWeek, WEEK_COUNT), [anchorWeek]);
   const weekFrom = weeks[0];
@@ -59,7 +61,8 @@ export function Dashboard() {
   const { data: members } = useSWR<Member[]>("/api/members", fetcher, {
     refreshInterval: REFRESH_MS,
   });
-  const { data: projects } = useSWR<Project[]>("/api/projects", fetcher, {
+  const projectsKey = archived ? "/api/projects?archived=1" : "/api/projects";
+  const { data: projects } = useSWR<Project[]>(projectsKey, fetcher, {
     refreshInterval: REFRESH_MS,
   });
   const tasksKey = `/api/tasks?weekFrom=${weekFrom}&weekTo=${weekTo}`;
@@ -68,7 +71,7 @@ export function Dashboard() {
   });
   const workloadKey = `/api/workload?weekFrom=${weekFrom}&weekTo=${weekTo}`;
   const { data: workload } = useSWR<Workload[]>(workloadKey, fetcher, {
-    refreshInterval: REFRESH_MS,
+    refreshInterval: archived ? 0 : REFRESH_MS,
   });
 
   const projectsById = useMemo(() => {
@@ -77,21 +80,52 @@ export function Dashboard() {
     return m;
   }, [projects]);
 
+  // タスクは projectsById に含まれるプロジェクトのものだけを使う
+  // （アーカイブビューならアーカイブ済みプロジェクトのタスクだけ、
+  //   通常ビューならアクティブプロジェクトのタスクだけが残る）
+  const visibleTasks = useMemo(
+    () => (tasks ?? []).filter((t) => projectsById[t.projectId]),
+    [tasks, projectsById],
+  );
+
+  // workload: 通常はテーブル値。アーカイブビューでは表示中タスクから合計を算出
   const workloadByKey = useMemo(() => {
     const m: Record<string, Workload> = {};
-    for (const w of workload ?? []) m[`${w.memberId}::${w.weekIso}`] = w;
+    if (archived) {
+      const sums = new Map<string, number>();
+      for (const t of visibleTasks) {
+        if (t.assigneeMemberId == null || t.estimatedHours == null) continue;
+        const h = Number(t.estimatedHours);
+        if (!Number.isFinite(h) || h <= 0) continue;
+        const key = `${t.assigneeMemberId}::${t.weekIso}`;
+        sums.set(key, (sums.get(key) ?? 0) + h);
+      }
+      let synthId = -1;
+      for (const [key, hours] of sums) {
+        const [mid, wk] = key.split("::");
+        m[key] = {
+          id: synthId--,
+          memberId: Number(mid),
+          weekIso: wk,
+          plannedHours: hours.toString(),
+          note: null,
+        } as Workload;
+      }
+    } else {
+      for (const w of workload ?? []) m[`${w.memberId}::${w.weekIso}`] = w;
+    }
     return m;
-  }, [workload]);
+  }, [workload, archived, visibleTasks]);
 
   const tasksByKey = useMemo(() => {
     const m: Record<string, Task[]> = {};
-    for (const t of tasks ?? []) {
+    for (const t of visibleTasks) {
       if (t.assigneeMemberId == null) continue;
       const key = `${t.assigneeMemberId}::${t.weekIso}`;
       (m[key] ??= []).push(t);
     }
     return m;
-  }, [tasks]);
+  }, [visibleTasks]);
 
   async function setHours(memberId: number, weekIso: string, hours: number) {
     const next = Math.max(0, Math.min(168, hours));
@@ -336,9 +370,11 @@ export function Dashboard() {
         }}
       >
         <div>
-          <span className="eyebrow">DASHBOARD</span>
+          <span className="eyebrow">
+            {archived ? "ARCHIVED" : "DASHBOARD"}
+          </span>
           <h2 className="t-h3" style={{ marginTop: 4 }}>
-            メンバー × 週
+            {archived ? "アーカイブ（メンバー × 週）" : "メンバー × 週"}
           </h2>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

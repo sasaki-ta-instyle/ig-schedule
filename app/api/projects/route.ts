@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { asc, isNull, sql } from "drizzle-orm";
+import { asc, isNotNull, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   clampHours,
@@ -14,12 +14,23 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const archived = url.searchParams.get("archived") === "1";
   const rows = await db
     .select()
     .from(schema.projects)
-    .where(isNull(schema.projects.archivedAt))
-    .orderBy(asc(schema.projects.sortOrder), asc(schema.projects.id));
+    .where(
+      archived
+        ? isNotNull(schema.projects.archivedAt)
+        : isNull(schema.projects.archivedAt),
+    )
+    .orderBy(
+      archived
+        ? asc(schema.projects.archivedAt)
+        : asc(schema.projects.sortOrder),
+      asc(schema.projects.id),
+    );
   return NextResponse.json(rows);
 }
 

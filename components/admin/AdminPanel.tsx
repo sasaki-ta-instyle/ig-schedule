@@ -47,13 +47,26 @@ export function AdminPanel() {
   async function archiveProject(p: Project) {
     if (
       !confirm(
-        `「${p.name}」をアーカイブします。\n関連するタスクも全て削除されます。よろしいですか？`,
+        `「${p.name}」をアーカイブします。\nダッシュボードからは消えますが、アーカイブページからいつでも復元できます。`,
+      )
+    )
+      return;
+    await postJson(`/api/projects/${p.id}/archive`, {});
+    mutate("/api/projects");
+    mutate((key) => typeof key === "string" && key.startsWith("/api/projects?archived"));
+    mutate((key) => typeof key === "string" && key.startsWith("/api/workload"));
+  }
+  async function deleteProject(p: Project) {
+    if (
+      !confirm(
+        `「${p.name}」を完全に削除します。\n関連するタスク・工数もすべて削除され、復元できません。本当に削除しますか？`,
       )
     )
       return;
     await del(`/api/projects/${p.id}`);
     mutate("/api/projects");
     mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
+    mutate((key) => typeof key === "string" && key.startsWith("/api/workload"));
   }
   function togglePlannedMember(p: Project, memberId: number) {
     const next = p.plannedMemberIds.includes(memberId)
@@ -124,6 +137,7 @@ export function AdminPanel() {
               onUpdate={(patch) => updateProject(p, patch)}
               onToggleMember={(id) => togglePlannedMember(p, id)}
               onArchive={() => archiveProject(p)}
+              onDelete={() => deleteProject(p)}
             />
           ))}
         </ul>
@@ -155,6 +169,7 @@ function ProjectRow({
   onUpdate,
   onToggleMember,
   onArchive,
+  onDelete,
 }: {
   project: Project;
   members: Member[];
@@ -162,6 +177,7 @@ function ProjectRow({
   onUpdate: (patch: Partial<Project>) => void | Promise<void>;
   onToggleMember: (memberId: number) => void | Promise<void>;
   onArchive: () => void | Promise<void>;
+  onDelete: () => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const memberById: Record<number, Member> = {};
@@ -172,7 +188,9 @@ function ProjectRow({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "auto 1fr 140px auto auto",
+          gridTemplateColumns: isEdit
+            ? "auto 1fr 140px auto auto auto"
+            : "auto 1fr 140px auto",
           gap: 10,
           alignItems: "center",
         }}
@@ -247,15 +265,26 @@ function ProjectRow({
         </button>
 
         {isEdit && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm edit-only"
-            onClick={onArchive}
-            title="アーカイブ"
-            style={{ fontSize: ".75rem", color: "var(--color-error)" }}
-          >
-            アーカイブ
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm edit-only"
+              onClick={onArchive}
+              title="ダッシュボードから外しアーカイブに移動（あとで復元可）"
+              style={{ fontSize: ".75rem" }}
+            >
+              アーカイブ
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm edit-only"
+              onClick={onDelete}
+              title="関連タスク・工数ごと完全削除（取り消し不可）"
+              style={{ fontSize: ".75rem", color: "var(--color-error)" }}
+            >
+              削除
+            </button>
+          </>
         )}
       </div>
 

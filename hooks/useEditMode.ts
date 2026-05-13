@@ -5,8 +5,17 @@ import { useEffect, useState } from "react";
 const KEY = "ig-schedule:edit-mode";
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
+type Mode = "preview" | "edit";
+
+const bus: EventTarget | null =
+  typeof window !== "undefined" ? new EventTarget() : null;
+
+function broadcast(next: Mode) {
+  bus?.dispatchEvent(new CustomEvent<Mode>("change", { detail: next }));
+}
+
 export function useEditMode() {
-  const [mode, setMode] = useState<"preview" | "edit">("preview");
+  const [mode, setMode] = useState<Mode>("preview");
   const [promptOpen, setPromptOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,13 +25,29 @@ export function useEditMode() {
       const stored = window.localStorage.getItem(KEY);
       if (stored === "edit" || stored === "preview") setMode(stored);
     } catch {}
+
+    const onBusChange = (e: Event) => {
+      const detail = (e as CustomEvent<Mode>).detail;
+      if (detail === "edit" || detail === "preview") setMode(detail);
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== KEY) return;
+      if (e.newValue === "edit" || e.newValue === "preview") setMode(e.newValue);
+    };
+    bus?.addEventListener("change", onBusChange);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      bus?.removeEventListener("change", onBusChange);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
-  function persist(next: "preview" | "edit") {
+  function persist(next: Mode) {
     setMode(next);
     try {
       window.localStorage.setItem(KEY, next);
     } catch {}
+    broadcast(next);
   }
 
   async function tryEnterEdit() {
@@ -66,15 +91,10 @@ export function useEditMode() {
     }
   }
 
-  async function exitEdit() {
+  function exitEdit() {
+    // UI モードだけ preview に戻す。サーバ側のセッション/cookie は破棄しない
+    // （cookie は 30 日有効。再度「編集」を押したときにパスワードを聞かれないため）
     persist("preview");
-    try {
-      await fetch(`${BASE}/api/auth/edit-check`, {
-        method: "DELETE",
-        cache: "no-store",
-        credentials: "same-origin",
-      });
-    } catch {}
   }
 
   async function update(next: "preview" | "edit") {
