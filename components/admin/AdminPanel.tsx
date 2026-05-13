@@ -167,13 +167,37 @@ export function AdminPanel() {
             </span>
           )}
           {isEdit && (
-            <button
-              type="button"
-              className="btn btn-primary edit-only"
-              onClick={() => setShowCreate(true)}
-            >
-              ＋ 新規プロジェクト
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm edit-only"
+                onClick={async () => {
+                  if (
+                    !confirm(
+                      "全メンバー×全週の工数を、アクティブなプロジェクトのタスク見積から再計算します。\n手動で入力した工数値は上書きされます。",
+                    )
+                  )
+                    return;
+                  await postJson("/api/workload/recalc", {});
+                  mutate(
+                    (key) =>
+                      typeof key === "string" &&
+                      key.startsWith("/api/workload"),
+                  );
+                }}
+                title="アクティブタスクの見積合計で workload を再計算"
+                style={{ fontSize: ".75rem" }}
+              >
+                工数を再計算
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary edit-only"
+                onClick={() => setShowCreate(true)}
+              >
+                ＋ 新規プロジェクト
+              </button>
+            </>
           )}
         </div>
       </header>

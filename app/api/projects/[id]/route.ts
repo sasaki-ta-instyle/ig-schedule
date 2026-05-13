@@ -11,7 +11,7 @@ import {
 } from "@/lib/validate";
 import {
   collectWorkloadBuckets,
-  subtractWorkloadBuckets,
+  recomputeWorkloadBuckets,
 } from "@/lib/project-workload";
 
 export async function PATCH(
@@ -135,13 +135,8 @@ export async function DELETE(
         throw new Error("PROJECT_NOT_FOUND");
       }
 
-      // アクティブな場合のみ workload を減算（archive 済みなら archive 時に減算済み）
-      let adjustedWorkloadBuckets = 0;
-      if (!exists.archivedAt) {
-        const buckets = await collectWorkloadBuckets(tx, projectId);
-        await subtractWorkloadBuckets(tx, buckets);
-        adjustedWorkloadBuckets = buckets.size;
-      }
+      // 影響を受けるバケットを先に把握（タスク削除前に）
+      const buckets = await collectWorkloadBuckets(tx, projectId);
 
       // タスクは projects.id への FK (onDelete: cascade) で連動削除されるが、
       // 件数を返すために明示的に削除する
@@ -155,9 +150,12 @@ export async function DELETE(
         .delete(schema.projects)
         .where(eq(schema.projects.id, projectId));
 
+      // 残りのアクティブタスクから対象バケットを再計算
+      await recomputeWorkloadBuckets(tx, buckets);
+
       return {
         deletedTaskCount: deletedTasks.length,
-        adjustedWorkloadBuckets,
+        adjustedWorkloadBuckets: buckets.size,
       };
     });
 

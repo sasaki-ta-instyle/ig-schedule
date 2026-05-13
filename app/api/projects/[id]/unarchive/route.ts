@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { toIntId } from "@/lib/validate";
 import {
-  addWorkloadBuckets,
   collectWorkloadBuckets,
+  recomputeWorkloadBuckets,
 } from "@/lib/project-workload";
 
 export const dynamic = "force-dynamic";
@@ -35,12 +35,14 @@ export async function POST(
       }
 
       const buckets = await collectWorkloadBuckets(tx, projectId);
-      await addWorkloadBuckets(tx, buckets);
 
+      // 先に archivedAt を解除してから、アクティブ全タスクで再計算
       await tx
         .update(schema.projects)
         .set({ archivedAt: null })
         .where(eq(schema.projects.id, projectId));
+
+      await recomputeWorkloadBuckets(tx, buckets);
 
       return {
         alreadyActive: false,

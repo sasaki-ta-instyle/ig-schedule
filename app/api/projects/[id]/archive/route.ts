@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { toIntId } from "@/lib/validate";
 import {
   collectWorkloadBuckets,
-  subtractWorkloadBuckets,
+  recomputeWorkloadBuckets,
 } from "@/lib/project-workload";
 
 export const dynamic = "force-dynamic";
@@ -34,13 +34,16 @@ export async function POST(
         return { alreadyArchived: true, adjustedWorkloadBuckets: 0 };
       }
 
+      // 影響を受けるバケット (memberId, weekIso) を先に把握
       const buckets = await collectWorkloadBuckets(tx, projectId);
-      await subtractWorkloadBuckets(tx, buckets);
 
+      // archivedAt を立ててからアクティブ全タスクで再計算（このプロジェクトは除外される）
       await tx
         .update(schema.projects)
         .set({ archivedAt: new Date() })
         .where(eq(schema.projects.id, projectId));
+
+      await recomputeWorkloadBuckets(tx, buckets);
 
       return {
         alreadyArchived: false,

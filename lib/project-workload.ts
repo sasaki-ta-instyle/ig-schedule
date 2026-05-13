@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -8,6 +8,57 @@ export type WorkloadBucket = {
   weekIso: string;
   hours: number;
 };
+
+/**
+ * 指定された (memberId, weekIso) バケットの workload を、
+ * アクティブな（archivedAt が NULL の）プロジェクトに属するタスクの
+ * estimatedHours 合計で**上書き**する。
+ *
+ * これにより、プロジェクトをアーカイブ／削除した結果として
+ * 「残り 0h」のバケットが発生したときに workload が必ず 0 に揃う。
+ *
+ * 注: 手動で workload を編集していた場合、対象バケットの値はクロッバーされる。
+ * 「プロジェクトを消したのに工数が 0 にならない」という直感に合わせるためのトレードオフ。
+ */
+export async function recomputeWorkloadBuckets(
+  tx: Tx,
+  buckets: Map<string, WorkloadBucket>,
+) {
+  for (const b of buckets.values()) {
+    const [agg] = await tx
+      .select({
+        total: sql<string>`COALESCE(SUM(${schema.tasks.estimatedHours})::numeric, 0)::text`,
+      })
+      .from(schema.tasks)
+      .innerJoin(
+        schema.projects,
+        eq(schema.tasks.projectId, schema.projects.id),
+      )
+      .where(
+        and(
+          eq(schema.tasks.assigneeMemberId, b.memberId),
+          eq(schema.tasks.weekIso, b.weekIso),
+          isNull(schema.projects.archivedAt),
+        ),
+      );
+    const totalStr = agg?.total ?? "0";
+
+    await tx
+      .insert(schema.workload)
+      .values({
+        memberId: b.memberId,
+        weekIso: b.weekIso,
+        plannedHours: totalStr,
+      })
+      .onConflictDoUpdate({
+        target: [schema.workload.memberId, schema.workload.weekIso],
+        set: {
+          plannedHours: totalStr,
+          updatedAt: sql`now()`,
+        },
+      });
+  }
+}
 
 export async function collectWorkloadBuckets(
   tx: Tx,
@@ -40,44 +91,3 @@ export async function collectWorkloadBuckets(
   return buckets;
 }
 
-export async function subtractWorkloadBuckets(
-  tx: Tx,
-  buckets: Map<string, WorkloadBucket>,
-) {
-  for (const b of buckets.values()) {
-    await tx
-      .update(schema.workload)
-      .set({
-        plannedHours: sql`GREATEST(0, ${schema.workload.plannedHours}::numeric - ${b.hours})`,
-        updatedAt: sql`now()`,
-      })
-      .where(
-        and(
-          eq(schema.workload.memberId, b.memberId),
-          eq(schema.workload.weekIso, b.weekIso),
-        ),
-      );
-  }
-}
-
-export async function addWorkloadBuckets(
-  tx: Tx,
-  buckets: Map<string, WorkloadBucket>,
-) {
-  for (const b of buckets.values()) {
-    await tx
-      .insert(schema.workload)
-      .values({
-        memberId: b.memberId,
-        weekIso: b.weekIso,
-        plannedHours: b.hours.toString(),
-      })
-      .onConflictDoUpdate({
-        target: [schema.workload.memberId, schema.workload.weekIso],
-        set: {
-          plannedHours: sql`${schema.workload.plannedHours} + ${b.hours}`,
-          updatedAt: sql`now()`,
-        },
-      });
-  }
-}
