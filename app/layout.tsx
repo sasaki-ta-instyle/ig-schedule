@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 
 const SITE_URL = "https://app.instyle.group/ig-schedule";
 const ASSETS = "https://app.instyle.group/_shared/static";
-const TITLE = "IGビルダー | INSTYLE GROUP";
+const TITLE = "プロジェクト週次ダッシュボード | INSTYLE GROUP";
 const DESCRIPTION = "週単位でプロジェクト・タスク・工数を管理するチームボード";
 
 export const metadata: Metadata = {
