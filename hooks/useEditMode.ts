@@ -163,14 +163,9 @@ export function useEditMode() {
   }
 
   async function exitEdit() {
-    // UI モードを preview に戻し、サーバ側のセッションも破棄してメンバー情報をクリア
-    try {
-      await fetch(`${BASE}/api/auth/edit-check`, {
-        method: "DELETE",
-        credentials: "same-origin",
-      });
-    } catch {}
-    persistMember(null);
+    // UI モードを preview に戻すだけ。サーバ側セッション（Cookie）は破棄しないので、
+    // 再度「編集」に切り替えたときは tryEnterEdit() の GET で再ログイン不要となる。
+    // 明示ログアウトが必要になったら DELETE /api/auth/edit-check を別 UI で呼ぶ。
     persist("preview");
   }
 
