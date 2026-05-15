@@ -45,6 +45,12 @@ export async function PATCH(
     });
     update.summary = v ?? "";
   }
+  if ("notes" in body) {
+    const v = sanitizeText(body.notes, TEXT_LIMITS.projectNotes, {
+      allowEmpty: true,
+    });
+    update.notes = v ?? "";
+  }
   if ("dueDate" in body) {
     if (body.dueDate === null) {
       update.dueDate = null;
@@ -92,6 +98,24 @@ export async function PATCH(
       );
     }
     update.plannedMemberIds = body.plannedMemberIds;
+  }
+  if ("visibleMemberIds" in body) {
+    if (!isPositiveIntArray(body.visibleMemberIds)) {
+      return NextResponse.json(
+        { error: "visibleMemberIds must be number[]" },
+        { status: 400 },
+      );
+    }
+    update.visibleMemberIds = body.visibleMemberIds;
+  }
+  if ("isPrivate" in body) {
+    if (typeof body.isPrivate !== "boolean") {
+      return NextResponse.json(
+        { error: "isPrivate must be boolean" },
+        { status: 400 },
+      );
+    }
+    update.isPrivate = body.isPrivate;
   }
   if ("sortOrder" in body) {
     if (

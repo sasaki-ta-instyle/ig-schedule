@@ -13,6 +13,7 @@ export const ALLOWED_PROJECT_STATUS = new Set<string>([
 export const TEXT_LIMITS = {
   projectName: 120,
   projectSummary: 4000,
+  projectNotes: 8000,
   taskTitle: 200,
   taskNotes: 2000,
   workloadNote: 500,

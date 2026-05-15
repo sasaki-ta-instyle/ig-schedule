@@ -6,6 +6,7 @@ import { del, fetcher, postJson } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import type { Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 type Project = {
   id: number;
@@ -240,7 +241,7 @@ export function ArchivedProjectsPanel() {
                 </div>
                 {p.summary && (
                   <div className="t-small muted" style={{ marginTop: 2 }}>
-                    {p.summary}
+                    <LinkifiedText text={p.summary} />
                   </div>
                 )}
               </div>

@@ -17,6 +17,8 @@ export const members = pgTable("members", {
   color: text("color").notNull().default("#82837A"),
   role: text("role"),
   sortOrder: integer("sort_order").notNull().default(0),
+  passwordHash: text("password_hash"),
+  isAdmin: boolean("is_admin").notNull().default(false),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
 
@@ -24,11 +26,14 @@ export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   summary: text("summary").notNull().default(""),
+  notes: text("notes").notNull().default(""),
   company: text("company"),
   dueDate: date("due_date"),
   color: text("color").notNull().default("#38537B"),
   status: text("status").notNull().default("active"),
   plannedMemberIds: jsonb("planned_member_ids").$type<number[]>().notNull().default([]),
+  isPrivate: boolean("is_private").notNull().default(false),
+  visibleMemberIds: jsonb("visible_member_ids").$type<number[]>().notNull().default([]),
   sortOrder: integer("sort_order").notNull().default(0),
   aiSeed: jsonb("ai_seed").$type<{
     summary: string;

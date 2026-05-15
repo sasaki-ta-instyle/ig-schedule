@@ -7,12 +7,14 @@ import { useEditMode } from "@/hooks/useEditMode";
 import { ProjectCreateModal } from "./ProjectCreateModal";
 import { COMPANIES, type Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 type Member = { id: number; name: string; color: string };
 type Project = {
   id: number;
   name: string;
   summary: string;
+  notes: string;
   company: Company | null;
   dueDate: string | null;
   color: string;
@@ -552,18 +554,46 @@ function ProjectRow({
               placeholder="プロジェクトの目的・主要なフェーズなど"
             />
           ) : (
-            <p
+            <div
               className="t-small muted"
               style={{
-                whiteSpace: "pre-wrap",
                 padding: "8px 10px",
                 background: "rgba(255,255,255,.32)",
                 borderRadius: "var(--r-sm)",
-                margin: 0,
               }}
             >
-              {p.summary || "（概要なし）"}
-            </p>
+              {p.summary ? <LinkifiedText text={p.summary} /> : "（概要なし）"}
+            </div>
+          )}
+
+          <label
+            className="form-label"
+            style={{ fontSize: ".6875rem", marginTop: 10 }}
+          >
+            メモ
+          </label>
+          {isEdit ? (
+            <textarea
+              className="input editable-only"
+              defaultValue={p.notes ?? ""}
+              rows={3}
+              onBlur={(e) => {
+                const v = e.currentTarget.value;
+                if (v !== (p.notes ?? "")) onUpdate({ notes: v });
+              }}
+              placeholder="参考リンク・進捗メモなど（URL は自動でリンクになります）"
+            />
+          ) : (
+            <div
+              className="t-small muted"
+              style={{
+                padding: "8px 10px",
+                background: "rgba(255,255,255,.32)",
+                borderRadius: "var(--r-sm)",
+              }}
+            >
+              {p.notes ? <LinkifiedText text={p.notes} /> : "（メモなし）"}
+            </div>
           )}
         </div>
       )}

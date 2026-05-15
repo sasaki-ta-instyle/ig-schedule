@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { asc, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, isNotNull, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   clampHours,
@@ -12,19 +12,25 @@ import {
   toIntId,
 } from "@/lib/validate";
 import { isKnownCompany } from "@/lib/companies";
+import { getViewerMemberId, visibilityCondition } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const archived = url.searchParams.get("archived") === "1";
+  const memberId = await getViewerMemberId(req);
   const rows = await db
     .select()
     .from(schema.projects)
     .where(
-      archived
-        ? isNotNull(schema.projects.archivedAt)
-        : isNull(schema.projects.archivedAt),
+      and(
+        archived
+          ? isNotNull(schema.projects.archivedAt)
+          : isNull(schema.projects.archivedAt),
+        visibilityCondition(memberId),
+      ),
     )
     .orderBy(
       archived
@@ -62,6 +68,9 @@ export async function POST(req: Request) {
   const summary = sanitizeText(body.summary, TEXT_LIMITS.projectSummary, {
     allowEmpty: true,
   }) ?? "";
+  const notes = sanitizeText(body.notes, TEXT_LIMITS.projectNotes, {
+    allowEmpty: true,
+  }) ?? "";
   const dueDate =
     typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
       ? body.dueDate
@@ -71,6 +80,10 @@ export async function POST(req: Request) {
   const company = isKnownCompany(body.company) ? body.company : null;
   const plannedMemberIds = isPositiveIntArray(body.plannedMemberIds)
     ? (body.plannedMemberIds as number[])
+    : [];
+  const isPrivate = body.isPrivate === true;
+  const visibleMemberIds = isPositiveIntArray(body.visibleMemberIds)
+    ? (body.visibleMemberIds as number[]).filter((id) => !plannedMemberIds.includes(id))
     : [];
 
   // タスク配列の事前検証（上限を厳格化）
@@ -130,11 +143,14 @@ export async function POST(req: Request) {
       .values({
         name,
         summary,
+        notes,
         company,
         dueDate,
         color,
         status,
         plannedMemberIds,
+        isPrivate,
+        visibleMemberIds,
         aiSeed,
       })
       .returning();

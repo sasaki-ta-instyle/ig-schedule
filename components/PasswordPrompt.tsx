@@ -1,32 +1,52 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/api";
+
+type Member = {
+  id: number;
+  name: string;
+  color: string;
+  sortOrder: number;
+};
 
 export function PasswordPrompt({
   open,
   pending,
   error,
+  initialMemberId,
   onSubmit,
   onCancel,
 }: {
   open: boolean;
   pending: boolean;
   error: string | null;
-  onSubmit: (password: string) => void;
+  initialMemberId: number | null;
+  onSubmit: (memberId: number, password: string) => void;
   onCancel: () => void;
 }) {
   const [pw, setPw] = useState("");
+  const [memberId, setMemberId] = useState<number | null>(initialMemberId);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: members } = useSWR<Member[]>(
+    open ? "/api/members" : null,
+    fetcher,
+  );
 
   useEffect(() => {
     if (!open) {
       setPw("");
     } else {
+      setMemberId(initialMemberId);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [open]);
+  }, [open, initialMemberId]);
 
   if (!open) return null;
+
+  const canSubmit = !pending && !!pw && memberId != null;
 
   return (
     <div
@@ -51,17 +71,61 @@ export function PasswordPrompt({
         className="glass-panel"
         onSubmit={(e) => {
           e.preventDefault();
-          if (pw && !pending) onSubmit(pw);
+          if (canSubmit && memberId != null) onSubmit(memberId, pw);
         }}
-        style={{ width: "min(380px, 100%)", padding: 24 }}
+        style={{ width: "min(420px, 100%)", padding: 24 }}
       >
         <span className="eyebrow">EDIT MODE</span>
         <h3 className="t-h4" style={{ marginTop: 4, marginBottom: 10 }}>
           編集モードに切替
         </h3>
         <p className="t-small muted" style={{ marginBottom: 14 }}>
-          編集にはパスワードが必要です。
+          あなたが誰か選んでパスワードを入力してください。
         </p>
+
+        <label className="form-label" style={{ marginBottom: 8 }}>
+          あなたは
+        </label>
+        <div
+          role="radiogroup"
+          aria-label="メンバー"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            marginBottom: 14,
+          }}
+        >
+          {(members ?? [])
+            .slice()
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((m) => {
+              const active = memberId === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  className={`timeline-chip ${active ? "is-active" : ""}`}
+                  onClick={() => setMemberId(m.id)}
+                  style={{
+                    background: active ? m.color : undefined,
+                    borderColor: active ? m.color : undefined,
+                  }}
+                >
+                  <span
+                    className="timeline-chip-dot"
+                    style={{ background: m.color }}
+                    aria-hidden="true"
+                  />
+                  {m.name}
+                </button>
+              );
+            })}
+        </div>
+
+        <label className="form-label">パスワード</label>
         <input
           ref={inputRef}
           type="password"
@@ -104,9 +168,9 @@ export function PasswordPrompt({
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={pending || !pw}
+            disabled={!canSubmit}
           >
-            {pending ? "確認中…" : "確定"}
+            {pending ? "確認中…" : "ログイン"}
           </button>
         </div>
       </form>

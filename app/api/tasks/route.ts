@@ -8,8 +8,10 @@ import {
   TEXT_LIMITS,
   toIntId,
 } from "@/lib/validate";
+import { getViewerMemberId, getVisibleProjectIds } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -17,6 +19,9 @@ export async function GET(req: Request) {
   const weekTo = url.searchParams.get("weekTo");
   const memberIds = url.searchParams.get("memberIds");
   const projectIds = url.searchParams.get("projectIds");
+
+  const memberId = await getViewerMemberId(req);
+  const visibleIds = await getVisibleProjectIds(memberId);
 
   const conds = [] as Array<
     ReturnType<typeof gte> | ReturnType<typeof lte> | ReturnType<typeof inArray>
@@ -29,15 +34,21 @@ export async function GET(req: Request) {
     const ids = memberIds.split(",").map(Number).filter(Number.isFinite);
     if (ids.length) conds.push(inArray(schema.tasks.assigneeMemberId, ids));
   }
+  // requested projectIds は visibleIds と AND を取る
+  let projectScope = visibleIds;
   if (projectIds) {
     const ids = projectIds.split(",").map(Number).filter(Number.isFinite);
-    if (ids.length) conds.push(inArray(schema.tasks.projectId, ids));
+    projectScope = projectScope.filter((id) => ids.includes(id));
   }
+  if (projectScope.length === 0) {
+    return NextResponse.json([]);
+  }
+  conds.push(inArray(schema.tasks.projectId, projectScope));
 
   const rows = await db
     .select()
     .from(schema.tasks)
-    .where(conds.length ? and(...conds) : undefined)
+    .where(and(...conds))
     .orderBy(
       asc(schema.tasks.weekIso),
       asc(schema.tasks.sortOrder),

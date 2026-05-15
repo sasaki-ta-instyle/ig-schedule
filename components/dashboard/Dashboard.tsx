@@ -324,38 +324,45 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     const [moved] = next.splice(index, 1);
     next.splice(target, 0, moved);
 
-    // 楽観的更新: SWR キャッシュの該当タスクに即時 sortOrder を反映
     const idToOrder = new Map(next.map((t, i) => [t.id, i] as const));
-    mutate(
-      tasksKey,
-      (prev: Task[] = []) => {
-        const updated = prev.map((t) =>
-          idToOrder.has(t.id)
-            ? { ...t, sortOrder: idToOrder.get(t.id)! }
-            : t,
-        );
-        return [...updated].sort(
-          (a, b) =>
-            a.weekIso.localeCompare(b.weekIso) ||
-            a.sortOrder - b.sortOrder ||
-            a.id - b.id,
-        );
-      },
-      { revalidate: false },
-    );
+    const applyOptimistic = (prev: Task[] = []) => {
+      const updated = prev.map((t) =>
+        idToOrder.has(t.id)
+          ? { ...t, sortOrder: idToOrder.get(t.id)! }
+          : t,
+      );
+      return [...updated].sort(
+        (a, b) =>
+          a.weekIso.localeCompare(b.weekIso) ||
+          a.sortOrder - b.sortOrder ||
+          a.id - b.id,
+      );
+    };
 
     try {
-      // 1リクエストで原子的に sortOrder 再付与
-      await postJson("/api/tasks/batch", {
-        ops: next.map((t, i) => ({
-          id: t.id,
-          patch: { sortOrder: i },
-        })),
-      });
+      // SWR の optimisticData パターンで、refreshInterval によるバックグラウンド
+      // 再フェッチが POST 中に古いデータでキャッシュを上書きしないようにする
+      await mutate<Task[]>(
+        tasksKey,
+        async (current) => {
+          await postJson("/api/tasks/batch", {
+            ops: next.map((t, i) => ({
+              id: t.id,
+              patch: { sortOrder: i },
+            })),
+          });
+          return applyOptimistic(current);
+        },
+        {
+          optimisticData: applyOptimistic,
+          rollbackOnError: true,
+          populateCache: true,
+          revalidate: false,
+        },
+      );
     } catch (e) {
       console.error("reorder failed", e);
     }
-    mutate(tasksKey);
   }
 
   return (

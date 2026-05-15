@@ -24,10 +24,13 @@ type DraftTask = {
 type StoredProjectDraft = {
   name: string;
   summary: string;
+  notes: string;
   company: Company | "";
   dueDate: string;
   color: string;
   plannedMemberIds: number[];
+  isPrivate: boolean;
+  visibleMemberIds: number[];
   drafts: DraftTask[];
   rationale: string;
 };
@@ -64,11 +67,16 @@ export function ProjectCreateModal({
   );
   const [name, setName] = useState(initial?.name ?? "");
   const [summary, setSummary] = useState(initial?.summary ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [company, setCompany] = useState<Company | "">(initial?.company ?? "");
   const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
   const [color, setColor] = useState(initial?.color ?? COLORS[0]);
   const [plannedMemberIds, setPlannedMemberIds] = useState<number[]>(
     initial?.plannedMemberIds ?? [],
+  );
+  const [isPrivate, setIsPrivate] = useState<boolean>(initial?.isPrivate ?? false);
+  const [visibleMemberIds, setVisibleMemberIds] = useState<number[]>(
+    initial?.visibleMemberIds ?? [],
   );
   const [drafts, setDrafts] = useState<DraftTask[]>(initial?.drafts ?? []);
   const [rationale, setRationale] = useState<string>(initial?.rationale ?? "");
@@ -77,8 +85,8 @@ export function ProjectCreateModal({
   const [aiError, setAiError] = useState<string | null>(null);
 
   const draftSnapshot = useMemo<StoredProjectDraft>(
-    () => ({ name, summary, company, dueDate, color, plannedMemberIds, drafts, rationale }),
-    [name, summary, company, dueDate, color, plannedMemberIds, drafts, rationale],
+    () => ({ name, summary, notes, company, dueDate, color, plannedMemberIds, isPrivate, visibleMemberIds, drafts, rationale }),
+    [name, summary, notes, company, dueDate, color, plannedMemberIds, isPrivate, visibleMemberIds, drafts, rationale],
   );
   const { clear: clearStoredDraft } = useAutosaveDraft(
     DRAFT_KEY,
@@ -138,10 +146,13 @@ export function ProjectCreateModal({
       await postJson("/api/projects", {
         name: name.trim(),
         summary: summary.trim(),
+        notes: notes.trim(),
         company: company || null,
         dueDate: dueDate || null,
         color,
         plannedMemberIds,
+        isPrivate,
+        visibleMemberIds: isPrivate ? visibleMemberIds : [],
         tasks: drafts,
         aiSeed: drafts.length
           ? { summary: summary.trim(), dueDate: dueDate || undefined, plannedMemberIds }
@@ -245,6 +256,16 @@ export function ProjectCreateModal({
                 rows={6}
               />
             </div>
+            <div>
+              <label className="form-label">メモ</label>
+              <textarea
+                className="input"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="参考リンク・連絡事項・進行中のメモなど（URL は自動でリンクになります）"
+                rows={4}
+              />
+            </div>
             <div style={{ display: "flex", gap: 12 }}>
               <div style={{ flex: 1 }}>
                 <label className="form-label">会社タグ</label>
@@ -342,6 +363,87 @@ export function ProjectCreateModal({
               ))}
             </div>
           </div>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: ".8125rem",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={isPrivate}
+              onChange={(e) => setIsPrivate(e.target.checked)}
+            />
+            <span>
+              <strong>非公開</strong>
+              <span className="muted" style={{ marginLeft: 8, fontSize: ".75rem" }}>
+                担当メンバー＋下で選んだメンバーだけに見えます
+              </span>
+            </span>
+          </label>
+
+          {isPrivate && (
+            <div style={{ marginTop: 10, paddingLeft: 24 }}>
+              <div className="form-label" style={{ marginBottom: 6 }}>
+                追加で閲覧できるメンバー
+                <span className="muted" style={{ marginLeft: 6, fontWeight: 400 }}>
+                  （担当に加えて見せる人）
+                </span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {members
+                  .filter((m) => !plannedMemberIds.includes(m.id))
+                  .map((m) => {
+                    const active = visibleMemberIds.includes(m.id);
+                    return (
+                      <label
+                        key={m.id}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          fontSize: ".8125rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="checkbox"
+                          checked={active}
+                          onChange={() =>
+                            setVisibleMemberIds((prev) =>
+                              prev.includes(m.id)
+                                ? prev.filter((x) => x !== m.id)
+                                : [...prev, m.id],
+                            )
+                          }
+                        />
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            background: m.color,
+                          }}
+                          aria-hidden="true"
+                        />
+                        {m.name}
+                      </label>
+                    );
+                  })}
+                {members.filter((m) => !plannedMemberIds.includes(m.id)).length === 0 && (
+                  <span className="t-small muted">担当メンバー以外がいません</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div
