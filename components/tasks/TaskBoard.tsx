@@ -41,6 +41,7 @@ export function TaskBoard() {
   const [filterMember, setFilterMember] = useState<number | "all">("all");
   const [filterProject, setFilterProject] = useState<number | "all">("all");
   const [filterDone, setFilterDone] = useState<"all" | "open" | "done">("all");
+  const [keyword, setKeyword] = useState<string>("");
 
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
@@ -55,15 +56,33 @@ export function TaskBoard() {
     return m;
   }, [members]);
 
+  const projectNameById = useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const p of projects ?? []) m[p.id] = p.name;
+    return m;
+  }, [projects]);
+
+  const trimmedKeyword = keyword.trim().toLowerCase();
+
   const filtered = useMemo(() => {
     return (tasks ?? []).filter((t) => {
       if (filterMember !== "all" && t.assigneeMemberId !== filterMember) return false;
       if (filterProject !== "all" && t.projectId !== filterProject) return false;
       if (filterDone === "open" && t.done) return false;
       if (filterDone === "done" && !t.done) return false;
+      if (trimmedKeyword) {
+        const haystack = [
+          t.title,
+          t.notes ?? "",
+          projectNameById[t.projectId] ?? "",
+        ]
+          .join("\n")
+          .toLowerCase();
+        if (!haystack.includes(trimmedKeyword)) return false;
+      }
       return true;
     });
-  }, [tasks, filterMember, filterProject, filterDone]);
+  }, [tasks, filterMember, filterProject, filterDone, trimmedKeyword, projectNameById]);
 
   const grouped = useMemo(() => {
     const m: Record<number, Task[]> = {};
@@ -108,6 +127,15 @@ export function TaskBoard() {
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            className="input"
+            type="search"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="タスク・メモ・プロジェクト名を検索"
+            style={{ width: 240 }}
+            aria-label="タスクを検索"
+          />
           <select
             className="input"
             value={String(filterProject)}
@@ -157,10 +185,15 @@ export function TaskBoard() {
         <p className="muted">
           プロジェクトがありません。「プロジェクト管理」ページから追加してください。
         </p>
+      ) : trimmedKeyword && filtered.length === 0 ? (
+        <p className="muted">
+          「{keyword.trim()}」に一致するタスクは見つかりませんでした。
+        </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {projects
             .filter((p) => filterProject === "all" || p.id === filterProject)
+            .filter((p) => !trimmedKeyword || (grouped[p.id]?.length ?? 0) > 0)
             .map((p) => {
               const list = grouped[p.id] ?? [];
               return (
