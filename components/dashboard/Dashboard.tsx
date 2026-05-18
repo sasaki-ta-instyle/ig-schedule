@@ -16,6 +16,13 @@ import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import type { Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
+import {
+  buildVirtualRecurringTasks,
+  recurringHoursByMemberWeek,
+  type RecurringTaskDTO,
+  type RecurringCompletionDTO,
+  type VirtualRecurringTask,
+} from "@/lib/recurring-virtual";
 
 type Member = {
   id: number;
@@ -77,6 +84,18 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
   const { data: workload } = useSWR<Workload[]>(workloadKey, fetcher, {
     refreshInterval: archived ? 0 : REFRESH_MS,
   });
+  const recurringKey = archived ? null : "/api/recurring-tasks";
+  const { data: recurring } = useSWR<RecurringTaskDTO[]>(recurringKey, fetcher, {
+    refreshInterval: REFRESH_MS,
+  });
+  const recurringCompletionsKey = archived
+    ? null
+    : `/api/recurring-tasks/completions?weekFrom=${weekFrom}&weekTo=${weekTo}`;
+  const { data: recurringCompletions } = useSWR<RecurringCompletionDTO[]>(
+    recurringCompletionsKey,
+    fetcher,
+    { refreshInterval: REFRESH_MS },
+  );
 
   const projectsById = useMemo(() => {
     const m: Record<number, Project> = {};
@@ -131,6 +150,33 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     return m;
   }, [visibleTasks]);
 
+  const virtualRecurring = useMemo(
+    () =>
+      archived
+        ? []
+        : buildVirtualRecurringTasks(
+            recurring ?? [],
+            recurringCompletions ?? [],
+            weeks,
+          ),
+    [archived, recurring, recurringCompletions, weeks],
+  );
+
+  const recurringByKey = useMemo(() => {
+    const m: Record<string, VirtualRecurringTask[]> = {};
+    for (const v of virtualRecurring) {
+      if (v.assigneeMemberId == null) continue;
+      const key = `${v.assigneeMemberId}::${v.weekIso}`;
+      (m[key] ??= []).push(v);
+    }
+    return m;
+  }, [virtualRecurring]);
+
+  const recurringHoursByKey = useMemo(
+    () => (archived ? {} : recurringHoursByMemberWeek(recurring ?? [], weeks)),
+    [archived, recurring, weeks],
+  );
+
   async function setHours(memberId: number, weekIso: string, hours: number) {
     const next = Math.max(0, Math.min(168, hours));
     await postJson(
@@ -144,6 +190,15 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
   async function toggleDone(task: Task) {
     await postJson(`/api/tasks/${task.id}`, { done: !task.done }, "PATCH");
     mutate(tasksKey);
+  }
+
+  async function toggleRecurringDone(v: VirtualRecurringTask) {
+    if (!recurringCompletionsKey) return;
+    await postJson(
+      `/api/recurring-tasks/${v.recurringId}/completions`,
+      { weekIso: v.weekIso, done: !v.done },
+    );
+    mutate(recurringCompletionsKey);
   }
 
   async function addQuickTask(
@@ -531,9 +586,12 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                     const cellKey = `${m.id}::${w}`;
                     const wl = workloadByKey[cellKey];
                     const planned = wl ? Number(wl.plannedHours) : 0;
+                    const extraRecurring = recurringHoursByKey[cellKey] ?? 0;
+                    const totalPlanned = planned + extraRecurring;
                     const capacity = weeklyCapacityHours(w);
-                    const over = planned > capacity;
+                    const over = totalPlanned > capacity;
                     const cellTasks = tasksByKey[cellKey] ?? [];
+                    const cellRecurring = recurringByKey[cellKey] ?? [];
                     return (
                       <td
                         key={w}
@@ -544,6 +602,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                           memberId={m.id}
                           weekIso={w}
                           planned={planned}
+                          extraRecurring={extraRecurring}
                           capacity={capacity}
                           over={over}
                           isEdit={isEdit}
@@ -575,6 +634,14 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                               }
                               onShiftPrev={() => shiftWeek(t, -1)}
                               onShiftNext={() => shiftWeek(t, 1)}
+                            />
+                          ))}
+                          {cellRecurring.map((v) => (
+                            <RecurringRow
+                              key={v.id}
+                              v={v}
+                              isEdit={isEdit}
+                              onToggle={() => toggleRecurringDone(v)}
                             />
                           ))}
                         </ul>
@@ -647,6 +714,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
 
 function HoursBadge({
   planned,
+  extraRecurring = 0,
   capacity,
   over,
   isEdit,
@@ -655,6 +723,7 @@ function HoursBadge({
   memberId: number;
   weekIso: string;
   planned: number;
+  extraRecurring?: number;
   capacity: number;
   over: boolean;
   isEdit: boolean;
@@ -664,14 +733,28 @@ function HoursBadge({
   useEffect(() => {
     setDraft(String(planned));
   }, [planned]);
+  const total = planned + extraRecurring;
+  const tipTitle =
+    extraRecurring > 0
+      ? `計画 ${planned}h + 定例 ${extraRecurring}h = ${total}h`
+      : undefined;
   if (!isEdit) {
     return (
       <div
-        className={`badge ${over ? "badge-error" : planned === 0 ? "" : "badge-ok"}`}
+        className={`badge ${over ? "badge-error" : total === 0 ? "" : "badge-ok"}`}
         style={{ width: "fit-content" }}
+        title={tipTitle}
       >
-        <strong className="mono">{planned || "—"}</strong>
+        <strong className="mono">{total || "—"}</strong>
         <span className="muted">/ {capacity}h</span>
+        {extraRecurring > 0 && (
+          <span
+            className="muted"
+            style={{ marginLeft: 4, fontSize: ".625rem" }}
+          >
+            （+定例{extraRecurring}h）
+          </span>
+        )}
       </div>
     );
   }
@@ -679,6 +762,7 @@ function HoursBadge({
     <div
       style={{ display: "flex", alignItems: "center", gap: 6, width: "fit-content" }}
       className="editable-only"
+      title={tipTitle}
     >
       <input
         className="input"
@@ -695,12 +779,80 @@ function HoursBadge({
         style={{ width: 64, padding: "4px 8px", fontSize: ".75rem" }}
       />
       <span className="t-small muted">/ {capacity}h</span>
+      {extraRecurring > 0 && (
+        <span className="muted" style={{ fontSize: ".625rem" }}>
+          +定例{extraRecurring}h
+        </span>
+      )}
       {over && (
         <span className="badge badge-error" style={{ fontSize: ".625rem" }}>
           超過
         </span>
       )}
     </div>
+  );
+}
+
+function RecurringRow({
+  v,
+  isEdit,
+  onToggle,
+}: {
+  v: VirtualRecurringTask;
+  isEdit: boolean;
+  onToggle: () => void;
+}) {
+  const hours = v.estimatedHours == null ? 0 : Number(v.estimatedHours);
+  return (
+    <li
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 6,
+        fontSize: ".75rem",
+        lineHeight: 1.4,
+      }}
+    >
+      <input
+        type="checkbox"
+        className="checkbox"
+        checked={v.done}
+        onChange={onToggle}
+        disabled={!isEdit}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span
+          className="badge"
+          style={{
+            fontSize: ".5625rem",
+            padding: "1px 5px",
+            marginRight: 5,
+            background: "rgba(120, 120, 100, 0.15)",
+            color: "var(--color-text-muted)",
+            verticalAlign: "middle",
+          }}
+          title="定例タスク（/recurring で編集）"
+        >
+          定例
+        </span>
+        <span
+          style={{
+            textDecoration: v.done ? "line-through" : "none",
+            color: v.done ? "var(--color-text-light)" : "var(--color-text)",
+          }}
+        >
+          {v.title}
+        </span>
+        {hours > 0 && (
+          <span
+            className="t-small mono muted"
+            style={{ marginLeft: 6, fontSize: ".625rem" }}
+          >
+            {hours}h
+          </span>
+        )}
+      </div>
+    </li>
   );
 }
 

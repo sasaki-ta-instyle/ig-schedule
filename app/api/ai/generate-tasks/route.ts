@@ -18,9 +18,7 @@ import {
   TEXT_LIMITS,
 } from "@/lib/validate";
 
-export const maxDuration = 60;
-
-const AI_TIMEOUT_MS = 90_000;
+const AI_TIMEOUT_MS = 170_000;
 
 export async function POST(req: Request) {
   let body: Record<string, unknown> = {};
@@ -190,19 +188,24 @@ export async function POST(req: Request) {
         tool_choice: { type: "tool", name: "submit_tasks" },
         messages: [{ role: "user", content: userPrompt }],
       },
-      { signal: abort.signal },
+      { signal: abort.signal, timeout: AI_TIMEOUT_MS },
     );
   } catch (e) {
     clearTimeout(timer);
     const msg = (e as Error).message ?? "";
-    if (msg.includes("aborted") || msg.includes("AbortError")) {
+    const details = msg.slice(0, 200);
+    if (
+      msg.includes("aborted") ||
+      msg.includes("AbortError") ||
+      msg.toLowerCase().includes("timeout")
+    ) {
       return NextResponse.json(
-        { error: "AI generation timed out" },
+        { error: "AI generation timed out", details },
         { status: 504 },
       );
     }
     return NextResponse.json(
-      { error: `AI error: ${msg.slice(0, 200)}` },
+      { error: `AI error: ${details}`, details },
       { status: 502 },
     );
   }

@@ -22,6 +22,7 @@ type Member = {
 const NAV: Array<{ href: string; label: string; editOnly?: boolean }> = [
   { href: "/", label: "ダッシュボード" },
   { href: "/tasks", label: "タスクボード" },
+  { href: "/recurring", label: "定例" },
   { href: "/timeline", label: "タイムライン" },
   { href: "/admin", label: "プロジェクト管理" },
   { href: "/archived", label: "アーカイブ", editOnly: true },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { postJson } from "@/lib/api";
 import {
   addWeeks,
@@ -81,8 +81,29 @@ export function ProjectCreateModal({
   const [drafts, setDrafts] = useState<DraftTask[]>(initial?.drafts ?? []);
   const [rationale, setRationale] = useState<string>(initial?.rationale ?? "");
   const [generating, setGenerating] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [saving, setSaving] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (generating) {
+      setElapsedSec(0);
+      const startedAt = Date.now();
+      tickRef.current = setInterval(() => {
+        setElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+      }, 1000);
+    } else if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+    return () => {
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+    };
+  }, [generating]);
 
   const draftSnapshot = useMemo<StoredProjectDraft>(
     () => ({ name, summary, notes, company, dueDate, color, plannedMemberIds, isPrivate, visibleMemberIds, drafts, rationale }),
@@ -130,7 +151,18 @@ export function ProjectCreateModal({
       setDrafts(res.tasks);
       setRationale(res.rationale);
     } catch (e) {
-      setAiError((e as Error).message);
+      const msg = (e as Error).message ?? "";
+      if (msg.startsWith("504")) {
+        setAiError(
+          "AI の応答が時間内に返りませんでした。プロジェクト概要を短くして、もう一度お試しください。",
+        );
+      } else if (msg.startsWith("502")) {
+        setAiError(
+          `AI 呼び出しでエラーが発生しました。少し待って再実行してください。(${msg.slice(0, 120)})`,
+        );
+      } else {
+        setAiError(msg);
+      }
     } finally {
       setGenerating(false);
     }
@@ -461,9 +493,16 @@ export function ProjectCreateModal({
             onClick={generate}
             disabled={generating || !name.trim() || !summary.trim() || plannedMemberIds.length === 0}
           >
-            {generating ? "AI が考え中…" : "タスクを AI で洗い出す"}
+            {generating
+              ? `AI が分析中… ${elapsedSec}s`
+              : "タスクを AI で洗い出す"}
           </button>
-          {drafts.length > 0 && (
+          {generating && (
+            <span className="t-small muted">
+              最大 2〜3 分かかることがあります
+            </span>
+          )}
+          {!generating && drafts.length > 0 && (
             <span className="t-small muted">
               {drafts.length} 件のタスク提案
             </span>

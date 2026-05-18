@@ -94,8 +94,43 @@ export const sessions = pgTable("sessions", {
   label: text("label"),
 });
 
+export const recurringTasks = pgTable("recurring_tasks", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  assigneeMemberId: integer("assignee_member_id").references(() => members.id, {
+    onDelete: "set null",
+  }),
+  recurrenceType: text("recurrence_type").notNull().default("weekly"),
+  estimatedHours: numeric("estimated_hours", { precision: 5, scale: 2 }),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const recurringTaskCompletions = pgTable(
+  "recurring_task_completions",
+  {
+    id: serial("id").primaryKey(),
+    recurringTaskId: integer("recurring_task_id")
+      .notNull()
+      .references(() => recurringTasks.id, { onDelete: "cascade" }),
+    weekIso: text("week_iso").notNull(),
+    doneAt: timestamp("done_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    recurringWeekUnique: uniqueIndex("recurring_completion_unique").on(
+      t.recurringTaskId,
+      t.weekIso,
+    ),
+  }),
+);
+
 export type Member = typeof members.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type Workload = typeof workload.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+export type RecurringTask = typeof recurringTasks.$inferSelect;
+export type RecurringTaskCompletion = typeof recurringTaskCompletions.$inferSelect;
