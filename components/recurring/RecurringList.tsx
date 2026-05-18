@@ -94,9 +94,6 @@ export function RecurringList() {
           <h2 className="t-h3" style={{ marginTop: 4 }}>
             定例タスク
           </h2>
-          <p className="t-small muted" style={{ marginTop: 4, maxWidth: 640 }}>
-            毎週繰り返すタスクのテンプレート。プロジェクトに紐付かず、ダッシュボードの該当週に「定例」として表示されます。工数を入れると担当者の週合計に動的加算されます。
-          </p>
         </div>
         <div
           style={{
