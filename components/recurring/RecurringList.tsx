@@ -25,6 +25,8 @@ const REFRESH_MS = 5000;
 export function RecurringList() {
   const { isEdit } = useEditMode();
   const [showArchived, setShowArchived] = useState(false);
+  const [keyword, setKeyword] = useState<string>("");
+  const [filterMember, setFilterMember] = useState<number | "all" | "unassigned">("all");
 
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: items } = useSWR<RecurringTask[]>(RECURRING_KEY, fetcher, {
@@ -37,10 +39,24 @@ export function RecurringList() {
     return m;
   }, [members]);
 
+  const trimmedKeyword = keyword.trim().toLowerCase();
+
   const visible = useMemo(() => {
     const list = items ?? [];
-    return showArchived ? list : list.filter((r) => !r.archivedAt);
-  }, [items, showArchived]);
+    return list.filter((r) => {
+      if (!showArchived && r.archivedAt) return false;
+      if (filterMember === "unassigned") {
+        if (r.assigneeMemberId != null) return false;
+      } else if (filterMember !== "all") {
+        if (r.assigneeMemberId !== filterMember) return false;
+      }
+      if (trimmedKeyword) {
+        const haystack = [r.title, r.notes ?? ""].join("\n").toLowerCase();
+        if (!haystack.includes(trimmedKeyword)) return false;
+      }
+      return true;
+    });
+  }, [items, showArchived, filterMember, trimmedKeyword]);
 
   async function updateField(r: RecurringTask, patch: Record<string, unknown>) {
     await postJson(`/api/recurring-tasks/${r.id}`, patch, "PATCH");
@@ -82,26 +98,69 @@ export function RecurringList() {
             毎週繰り返すタスクのテンプレート。プロジェクトに紐付かず、ダッシュボードの該当週に「定例」として表示されます。工数を入れると担当者の週合計に動的加算されます。
           </p>
         </div>
-        <label
-          className="t-small muted"
-          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
         >
           <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
+            className="input"
+            type="search"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="定例タスクを検索"
+            style={{ width: 200 }}
+            aria-label="定例タスクを検索"
           />
-          アーカイブ済みも表示
-        </label>
+          <select
+            className="input"
+            value={String(filterMember)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilterMember(
+                v === "all" || v === "unassigned" ? v : Number(v),
+              );
+            }}
+            style={{ width: 140 }}
+          >
+            <option value="all">担当: すべて</option>
+            <option value="unassigned">未割当</option>
+            {members?.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <label
+            className="t-small muted"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            アーカイブ済みも表示
+          </label>
+        </div>
       </header>
 
       <div className="glass-card" style={{ padding: 16 }}>
         {!items ? (
           <p className="muted">読み込み中…</p>
         ) : visible.length === 0 ? (
-          <p className="muted t-small">
-            まだ定例タスクがありません。{isEdit && "下のフォームから追加できます。"}
-          </p>
+          trimmedKeyword || filterMember !== "all" ? (
+            <p className="muted t-small">
+              条件に一致する定例タスクは見つかりませんでした。
+            </p>
+          ) : (
+            <p className="muted t-small">
+              まだ定例タスクがありません。{isEdit && "下のフォームから追加できます。"}
+            </p>
+          )
         ) : (
           <ul
             className="task-list"
