@@ -31,6 +31,10 @@ type Task = {
 const REFRESH_MS = 5000;
 const RANGE = 12;
 const EXPANDED_STORAGE_KEY = "ig-schedule:project-expanded";
+const PAGE_SIZE_STORAGE_KEY = "ig-schedule:projects-page-size";
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+const DEFAULT_PAGE_SIZE: PageSize = 10;
 
 export function TaskBoard() {
   const { isEdit } = useEditMode();
@@ -82,6 +86,31 @@ export function TaskBoard() {
     });
   }
 
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
+      if (raw) {
+        const n = Number(raw);
+        if ((PAGE_SIZE_OPTIONS as readonly number[]).includes(n)) {
+          setPageSize(n as PageSize);
+        }
+      }
+    } catch {
+      // 無視
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize));
+    } catch {
+      // 無視
+    }
+  }, [pageSize]);
+
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
   const tasksKey = `/api/tasks?weekFrom=${weekFrom}&weekTo=${weekTo}`;
@@ -128,6 +157,28 @@ export function TaskBoard() {
     for (const t of filtered) (m[t.projectId] ??= []).push(t);
     return m;
   }, [filtered]);
+
+  const visibleProjects = useMemo(() => {
+    return (projects ?? [])
+      .filter((p) => filterProject === "all" || p.id === filterProject)
+      .filter((p) => !trimmedKeyword || (grouped[p.id]?.length ?? 0) > 0);
+  }, [projects, filterProject, trimmedKeyword, grouped]);
+
+  const totalPages = Math.max(1, Math.ceil(visibleProjects.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterMember, filterProject, filterDone, trimmedKeyword, pageSize]);
+
+  const pagedProjects = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return visibleProjects.slice(start, start + pageSize);
+  }, [visibleProjects, safePage, pageSize]);
 
   const workloadKey = `/api/workload?weekFrom=${weekFrom}&weekTo=${weekTo}`;
 
@@ -215,6 +266,19 @@ export function TaskBoard() {
             <option value="open">未完了のみ</option>
             <option value="done">完了のみ</option>
           </select>
+          <select
+            className="input"
+            value={String(pageSize)}
+            onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
+            style={{ width: 130 }}
+            aria-label="1ページあたりのプロジェクト件数"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n} 件 / ページ
+              </option>
+            ))}
+          </select>
         </div>
       </header>
 
@@ -230,10 +294,7 @@ export function TaskBoard() {
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {projects
-            .filter((p) => filterProject === "all" || p.id === filterProject)
-            .filter((p) => !trimmedKeyword || (grouped[p.id]?.length ?? 0) > 0)
-            .map((p) => {
+          {pagedProjects.map((p) => {
               const list = grouped[p.id] ?? [];
               const isCollapsed = trimmedKeyword
                 ? false
@@ -411,6 +472,42 @@ export function TaskBoard() {
                 </div>
               );
             })}
+          {visibleProjects.length > pageSize && (
+            <nav
+              aria-label="プロジェクトのページ送り"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 12,
+                marginTop: 8,
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                aria-label="前のページ"
+              >
+                ← 前へ
+              </button>
+              <span className="muted t-small" aria-live="polite">
+                {safePage} / {totalPages} ページ（全 {visibleProjects.length} 件）
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  setPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={safePage >= totalPages}
+                aria-label="次のページ"
+              >
+                次へ →
+              </button>
+            </nav>
+          )}
         </div>
       )}
     </section>
