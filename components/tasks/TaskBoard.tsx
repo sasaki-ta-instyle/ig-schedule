@@ -30,7 +30,7 @@ type Task = {
 
 const REFRESH_MS = 5000;
 const RANGE = 12;
-const COLLAPSE_STORAGE_KEY = "ig-schedule:project-collapsed";
+const EXPANDED_STORAGE_KEY = "ig-schedule:project-expanded";
 
 export function TaskBoard() {
   const { isEdit } = useEditMode();
@@ -44,16 +44,16 @@ export function TaskBoard() {
   const [filterDone, setFilterDone] = useState<"all" | "open" | "done">("all");
   const [keyword, setKeyword] = useState<string>("");
 
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
-  const [collapsedHydrated, setCollapsedHydrated] = useState(false);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [expandedHydrated, setExpandedHydrated] = useState(false);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+      const raw = localStorage.getItem(EXPANDED_STORAGE_KEY);
       if (raw) {
         const arr = JSON.parse(raw) as unknown;
         if (Array.isArray(arr)) {
-          setCollapsed(
+          setExpanded(
             new Set(arr.filter((v): v is number => typeof v === "number"))
           );
         }
@@ -61,20 +61,20 @@ export function TaskBoard() {
     } catch {
       // localStorage 不在・JSON 破損は無視
     }
-    setCollapsedHydrated(true);
+    setExpandedHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!collapsedHydrated) return;
+    if (!expandedHydrated) return;
     try {
-      localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsed]));
+      localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify([...expanded]));
     } catch {
       // quota 等は無視
     }
-  }, [collapsed, collapsedHydrated]);
+  }, [expanded, expandedHydrated]);
 
-  function toggleCollapsed(projectId: number) {
-    setCollapsed((prev) => {
+  function toggleExpanded(projectId: number) {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(projectId)) next.delete(projectId);
       else next.add(projectId);
@@ -237,13 +237,13 @@ export function TaskBoard() {
               const list = grouped[p.id] ?? [];
               const isCollapsed = trimmedKeyword
                 ? false
-                : collapsed.has(p.id);
+                : !expanded.has(p.id);
               const panelId = `project-panel-${p.id}`;
               return (
                 <div key={p.id} className="glass-card" style={{ padding: 16 }}>
                   <button
                     type="button"
-                    onClick={() => toggleCollapsed(p.id)}
+                    onClick={() => toggleExpanded(p.id)}
                     aria-expanded={!isCollapsed}
                     aria-controls={panelId}
                     style={{
