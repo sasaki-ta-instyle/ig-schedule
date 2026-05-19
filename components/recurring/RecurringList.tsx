@@ -21,6 +21,10 @@ type RecurringTask = {
 
 const RECURRING_KEY = "/api/recurring-tasks?archived=1";
 const REFRESH_MS = 5000;
+const PAGE_SIZE_STORAGE_KEY = "ig-schedule:recurring-page-size";
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+const DEFAULT_PAGE_SIZE: PageSize = 10;
 
 export function RecurringList() {
   const { isEdit } = useEditMode();
@@ -57,6 +61,47 @@ export function RecurringList() {
       return true;
     });
   }, [items, showArchived, filterMember, trimmedKeyword]);
+
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
+      if (raw) {
+        const n = Number(raw);
+        if ((PAGE_SIZE_OPTIONS as readonly number[]).includes(n)) {
+          setPageSize(n as PageSize);
+        }
+      }
+    } catch {
+      // 無視
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize));
+    } catch {
+      // 無視
+    }
+  }, [pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterMember, trimmedKeyword, showArchived, pageSize]);
+
+  const pagedVisible = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, safePage, pageSize]);
 
   async function updateField(r: RecurringTask, patch: Record<string, unknown>) {
     await postJson(`/api/recurring-tasks/${r.id}`, patch, "PATCH");
@@ -142,6 +187,19 @@ export function RecurringList() {
             />
             アーカイブ済みも表示
           </label>
+          <select
+            className="input"
+            value={String(pageSize)}
+            onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
+            style={{ width: 130 }}
+            aria-label="1ページあたりの件数"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n} 件 / ページ
+              </option>
+            ))}
+          </select>
         </div>
       </header>
 
@@ -170,7 +228,7 @@ export function RecurringList() {
               gap: 2,
             }}
           >
-            {visible.map((r) => (
+            {pagedVisible.map((r) => (
               <li
                 key={r.id}
                 style={{
@@ -269,6 +327,40 @@ export function RecurringList() {
           />
         )}
       </div>
+      {visible.length > pageSize && (
+        <nav
+          aria-label="定例タスクのページ送り"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 12,
+            marginTop: 12,
+          }}
+        >
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage <= 1}
+            aria-label="前のページ"
+          >
+            ← 前へ
+          </button>
+          <span className="muted t-small" aria-live="polite">
+            {safePage} / {totalPages} ページ（全 {visible.length} 件）
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage >= totalPages}
+            aria-label="次のページ"
+          >
+            次へ →
+          </button>
+        </nav>
+      )}
     </section>
   );
 }
