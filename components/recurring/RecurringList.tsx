@@ -64,6 +64,7 @@ export function RecurringList() {
 
   const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
+  const [pageSizeHydrated, setPageSizeHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -77,22 +78,20 @@ export function RecurringList() {
     } catch {
       // 無視
     }
+    setPageSizeHydrated(true);
   }, []);
 
   useEffect(() => {
+    if (!pageSizeHydrated) return;
     try {
       localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize));
     } catch {
       // 無視
     }
-  }, [pageSize]);
+  }, [pageSize, pageSizeHydrated]);
 
   const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
-
-  useEffect(() => {
-    if (page !== safePage) setPage(safePage);
-  }, [page, safePage]);
 
   useEffect(() => {
     setPage(1);
@@ -341,19 +340,24 @@ export function RecurringList() {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => setPage(Math.max(1, safePage - 1))}
             disabled={safePage <= 1}
             aria-label="前のページ"
           >
             ← 前へ
           </button>
-          <span className="muted t-small" aria-live="polite">
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="muted t-small"
+          >
             {safePage} / {totalPages} ページ（全 {visible.length} 件）
-          </span>
+          </div>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => setPage(Math.min(totalPages, safePage + 1))}
             disabled={safePage >= totalPages}
             aria-label="次のページ"
           >

@@ -34,6 +34,7 @@ const COLORS = [
 ];
 
 const PAGE_SIZE_STORAGE_KEY = "ig-schedule:admin-projects-page-size";
+const PROJECT_EXPANDED_STORAGE_KEY = "ig-schedule:admin-project-expanded";
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 const DEFAULT_PAGE_SIZE: PageSize = 10;
@@ -52,6 +53,12 @@ export function AdminPanel() {
 
   const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
+  const [pageSizeHydrated, setPageSizeHydrated] = useState(false);
+
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [expandedHydrated, setExpandedHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -65,23 +72,57 @@ export function AdminPanel() {
     } catch {
       // 無視
     }
+    setPageSizeHydrated(true);
+
+    try {
+      const raw = localStorage.getItem(PROJECT_EXPANDED_STORAGE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw) as unknown;
+        if (Array.isArray(arr)) {
+          setExpandedProjectIds(
+            new Set(arr.filter((v): v is number => typeof v === "number")),
+          );
+        }
+      }
+    } catch {
+      // 無視
+    }
+    setExpandedHydrated(true);
   }, []);
 
   useEffect(() => {
+    if (!pageSizeHydrated) return;
     try {
       localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize));
     } catch {
       // 無視
     }
-  }, [pageSize]);
+  }, [pageSize, pageSizeHydrated]);
+
+  useEffect(() => {
+    if (!expandedHydrated) return;
+    try {
+      localStorage.setItem(
+        PROJECT_EXPANDED_STORAGE_KEY,
+        JSON.stringify([...expandedProjectIds]),
+      );
+    } catch {
+      // 無視
+    }
+  }, [expandedProjectIds, expandedHydrated]);
+
+  function toggleProjectExpanded(projectId: number) {
+    setExpandedProjectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }
 
   const projectCount = projects?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(projectCount / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
-
-  useEffect(() => {
-    if (page !== safePage) setPage(safePage);
-  }, [page, safePage]);
 
   useEffect(() => {
     setPage(1);
@@ -284,7 +325,7 @@ export function AdminPanel() {
         >
           <span className="t-small" style={{ fontWeight: 600 }}>
             {selectedIds.size > 0
-              ? `${selectedIds.size} 件選択中`
+              ? `${selectedIds.size} 件選択中（全ページ）`
               : "複数選択して一括操作"}
           </span>
           <button
@@ -296,10 +337,15 @@ export function AdminPanel() {
                 : selectAll
             }
             style={{ fontSize: ".75rem" }}
+            title={
+              selectedIds.size === (projects?.length ?? 0)
+                ? "全件の選択を解除します"
+                : "ページをまたいで全 " + (projects?.length ?? 0) + " 件を選択します"
+            }
           >
             {selectedIds.size === (projects?.length ?? 0)
-              ? "選択解除"
-              : "すべて選択"}
+              ? `全 ${projects?.length ?? 0} 件の選択を解除`
+              : `全 ${projects?.length ?? 0} 件を選択`}
           </button>
           <div style={{ flex: 1 }} />
           <button
@@ -347,6 +393,8 @@ export function AdminPanel() {
               members={members ?? []}
               isEdit={isEdit}
               selected={selectedIds.has(p.id)}
+              expanded={expandedProjectIds.has(p.id)}
+              onToggleExpanded={() => toggleProjectExpanded(p.id)}
               onToggleSelected={() => toggleSelected(p.id)}
               onUpdate={(patch) => updateProject(p, patch)}
               onToggleMember={(id) => togglePlannedMember(p, id)}
@@ -371,19 +419,24 @@ export function AdminPanel() {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => setPage(Math.max(1, safePage - 1))}
             disabled={safePage <= 1}
             aria-label="前のページ"
           >
             ← 前へ
           </button>
-          <span className="muted t-small" aria-live="polite">
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="muted t-small"
+          >
             {safePage} / {totalPages} ページ（全 {projectCount} 件）
-          </span>
+          </div>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => setPage(Math.min(totalPages, safePage + 1))}
             disabled={safePage >= totalPages}
             aria-label="次のページ"
           >
@@ -416,6 +469,8 @@ function ProjectRow({
   members,
   isEdit,
   selected,
+  expanded,
+  onToggleExpanded,
   onToggleSelected,
   onUpdate,
   onToggleMember,
@@ -426,13 +481,14 @@ function ProjectRow({
   members: Member[];
   isEdit: boolean;
   selected: boolean;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onToggleSelected: () => void;
   onUpdate: (patch: Partial<Project>) => void | Promise<void>;
   onToggleMember: (memberId: number) => void | Promise<void>;
   onArchive: () => void | Promise<void>;
   onDelete: () => void | Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const memberById: Record<number, Member> = {};
   for (const m of members) memberById[m.id] = m;
 
@@ -549,7 +605,7 @@ function ProjectRow({
         <button
           type="button"
           className="btn btn-ghost btn-sm"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={onToggleExpanded}
           title="詳細を開く"
           style={{ fontSize: ".75rem" }}
         >
