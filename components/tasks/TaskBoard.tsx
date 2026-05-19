@@ -30,6 +30,7 @@ type Task = {
 
 const REFRESH_MS = 5000;
 const RANGE = 12;
+const COLLAPSE_STORAGE_KEY = "ig-schedule:project-collapsed";
 
 export function TaskBoard() {
   const { isEdit } = useEditMode();
@@ -42,6 +43,44 @@ export function TaskBoard() {
   const [filterProject, setFilterProject] = useState<number | "all">("all");
   const [filterDone, setFilterDone] = useState<"all" | "open" | "done">("all");
   const [keyword, setKeyword] = useState<string>("");
+
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [collapsedHydrated, setCollapsedHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw) as unknown;
+        if (Array.isArray(arr)) {
+          setCollapsed(
+            new Set(arr.filter((v): v is number => typeof v === "number"))
+          );
+        }
+      }
+    } catch {
+      // localStorage 不在・JSON 破損は無視
+    }
+    setCollapsedHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!collapsedHydrated) return;
+    try {
+      localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsed]));
+    } catch {
+      // quota 等は無視
+    }
+  }, [collapsed, collapsedHydrated]);
+
+  function toggleCollapsed(projectId: number) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }
 
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
@@ -196,16 +235,48 @@ export function TaskBoard() {
             .filter((p) => !trimmedKeyword || (grouped[p.id]?.length ?? 0) > 0)
             .map((p) => {
               const list = grouped[p.id] ?? [];
+              const isCollapsed = trimmedKeyword
+                ? false
+                : collapsed.has(p.id);
+              const panelId = `project-panel-${p.id}`;
               return (
                 <div key={p.id} className="glass-card" style={{ padding: 16 }}>
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapsed(p.id)}
+                    aria-expanded={!isCollapsed}
+                    aria-controls={panelId}
                     style={{
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
-                      marginBottom: 10,
+                      marginBottom: isCollapsed ? 0 : 10,
+                      width: "100%",
+                      padding: 0,
+                      border: 0,
+                      background: "transparent",
+                      color: "inherit",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      font: "inherit",
                     }}
                   >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: "inline-flex",
+                        width: 14,
+                        justifyContent: "center",
+                        color: "var(--color-text-light)",
+                        fontSize: ".75rem",
+                        transform: isCollapsed
+                          ? "rotate(-90deg)"
+                          : "rotate(0deg)",
+                        transition: "transform .15s ease",
+                      }}
+                    >
+                      ▾
+                    </span>
                     <span
                       style={{
                         width: 10,
@@ -221,7 +292,8 @@ export function TaskBoard() {
                     <span className="muted t-small">
                       ({list.filter((t) => t.done).length}/{list.length})
                     </span>
-                  </div>
+                  </button>
+                  <div id={panelId} hidden={isCollapsed}>
                   {list.length === 0 ? (
                     <p className="muted t-small">該当タスクなし</p>
                   ) : (
@@ -335,6 +407,7 @@ export function TaskBoard() {
                       onCreated={() => mutate(tasksKey)}
                     />
                   )}
+                  </div>
                 </div>
               );
             })}
