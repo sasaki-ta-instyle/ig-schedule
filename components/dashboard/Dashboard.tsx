@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   addWeeks,
@@ -87,6 +87,35 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     refreshInterval: archived ? 0 : REFRESH_MS,
   });
   const { pushHistory } = useTaskHistory();
+
+  // 行ホバーでプロジェクト名を出すツールチップ。TaskRow ごとに state を持つと
+  // セルあたり数百個になりうるので、Dashboard 上位で 1 つだけ保持する。
+  const [tooltip, setTooltip] = useState<
+    { x: number; y: number; label: string } | null
+  >(null);
+  const TOOLTIP_MAX_W = 320;
+  const showTooltip = useCallback((rect: DOMRect, label: string) => {
+    if (!label) return;
+    const margin = 8;
+    const x = Math.min(
+      rect.left,
+      window.innerWidth - TOOLTIP_MAX_W - margin,
+    );
+    setTooltip({ x: Math.max(margin, x), y: rect.bottom + 4, label });
+  }, []);
+  const hideTooltip = useCallback(() => setTooltip(null), []);
+
+  // スクロール中に mouseleave が取りこぼされた場合に備えて閉じる
+  useEffect(() => {
+    if (!tooltip) return;
+    const onScroll = () => setTooltip(null);
+    window.addEventListener("scroll", onScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      window.removeEventListener("scroll", onScroll, { capture: true });
+  }, [tooltip]);
   const recurringKey = archived ? null : "/api/recurring-tasks";
   const { data: recurring } = useSWR<RecurringTaskDTO[]>(recurringKey, fetcher, {
     refreshInterval: REFRESH_MS,
@@ -660,6 +689,8 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                               }
                               onShiftPrev={() => shiftWeek(t, -1)}
                               onShiftNext={() => shiftWeek(t, 1)}
+                              onShowTooltip={showTooltip}
+                              onHideTooltip={hideTooltip}
                             />
                           ))}
                           {cellRecurring.map((v) => (
@@ -734,6 +765,36 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
         </span>
         <span>残業上限: 月 {WORK_RULES.monthlyOvertimeLimitHours}h まで</span>
       </footer>
+      {tooltip &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: "fixed",
+              left: tooltip.x,
+              top: tooltip.y,
+              zIndex: 9999,
+              pointerEvents: "none",
+              padding: "4px 8px",
+              borderRadius: "var(--r-sm)",
+              background: "rgba(255,255,255,.78)",
+              backdropFilter: "blur(14px) saturate(1.3)",
+              WebkitBackdropFilter: "blur(14px) saturate(1.3)",
+              border: "1px solid rgba(255,255,255,.55)",
+              boxShadow: "0 6px 18px rgba(53,54,45,.10)",
+              color: "var(--color-text)",
+              fontSize: ".6875rem",
+              lineHeight: 1.3,
+              whiteSpace: "nowrap",
+              maxWidth: TOOLTIP_MAX_W,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {tooltip.label}
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }
@@ -905,6 +966,8 @@ function TaskRow({
   onMoveDown,
   onShiftPrev,
   onShiftNext,
+  onShowTooltip,
+  onHideTooltip,
 }: {
   task: Task;
   project: Project | undefined;
@@ -916,25 +979,31 @@ function TaskRow({
   onMoveDown?: () => void;
   onShiftPrev?: () => void;
   onShiftNext?: () => void;
+  onShowTooltip: (rect: DOMRect, label: string) => void;
+  onHideTooltip: () => void;
 }) {
   const liRef = useRef<HTMLLIElement>(null);
-  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
   const projectLabel = project?.name ?? "";
   function showTip() {
     if (!projectLabel) return;
     const r = liRef.current?.getBoundingClientRect();
-    if (!r) return;
-    setTip({ x: r.left, y: r.bottom + 4 });
+    if (r) onShowTooltip(r, projectLabel);
   }
   function hideTip() {
-    setTip(null);
+    onHideTooltip();
   }
 
   return (
     <li
       ref={liRef}
+      tabIndex={projectLabel ? 0 : undefined}
+      aria-label={
+        projectLabel ? `${task.title}（プロジェクト：${projectLabel}）` : undefined
+      }
       onMouseEnter={showTip}
       onMouseLeave={hideTip}
+      onFocus={showTip}
+      onBlur={hideTip}
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -950,36 +1019,6 @@ function TaskRow({
         onChange={onToggle}
         disabled={!isEdit}
       />
-      {tip &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            style={{
-              position: "fixed",
-              left: tip.x,
-              top: tip.y,
-              zIndex: 9999,
-              pointerEvents: "none",
-              padding: "4px 8px",
-              borderRadius: "var(--r-sm)",
-              background: "rgba(255,255,255,.78)",
-              backdropFilter: "blur(14px) saturate(1.3)",
-              WebkitBackdropFilter: "blur(14px) saturate(1.3)",
-              border: "1px solid rgba(255,255,255,.55)",
-              boxShadow: "0 6px 18px rgba(53,54,45,.10)",
-              color: "var(--color-text)",
-              fontSize: ".6875rem",
-              lineHeight: 1.3,
-              whiteSpace: "nowrap",
-              maxWidth: 320,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {projectLabel}
-          </div>,
-          document.body,
-        )}
       <div style={{ flex: 1, minWidth: 0 }}>
         {project?.company && (
           <span style={{ marginRight: 5, verticalAlign: "middle" }}>
