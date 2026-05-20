@@ -6,6 +6,7 @@ import { addWeeks, currentWeekIso, weekIsoLabel, weekIsoRange } from "@/lib/week
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
+import { useTaskHistory } from "@/hooks/useTaskHistory";
 import type { Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
 import {
@@ -223,19 +224,133 @@ export function TaskBoard() {
 
   const workloadKey = `/api/workload?weekFrom=${weekFrom}&weekTo=${weekTo}`;
 
+  const { pushHistory } = useTaskHistory();
+
+  // tasksKey の楽観更新ヘルパ。refreshInterval との交錯を避けるため
+  // 全ての書込みは mutate({ optimisticData, rollbackOnError, revalidate: false }) で行う。
+  async function commitTaskPatch(
+    id: number,
+    patch: Record<string, unknown>,
+    apply: (t: Task) => Task,
+    opts: { affectsWorkload: boolean },
+  ) {
+    await mutate<Task[]>(
+      tasksKey,
+      async (current) => {
+        await postJson(`/api/tasks/${id}`, patch, "PATCH");
+        return (current ?? []).map((t) => (t.id === id ? apply(t) : t));
+      },
+      {
+        optimisticData: (current) =>
+          (current ?? []).map((t) => (t.id === id ? apply(t) : t)),
+        rollbackOnError: true,
+        populateCache: true,
+        revalidate: false,
+      },
+    );
+    if (opts.affectsWorkload) mutate(workloadKey);
+  }
+
   async function toggleDone(t: Task) {
-    await postJson(`/api/tasks/${t.id}`, { done: !t.done }, "PATCH");
-    mutate(tasksKey);
+    const newDone = !t.done;
+    const oldDone = t.done;
+    try {
+      await commitTaskPatch(
+        t.id,
+        { done: newDone },
+        (x) => ({ ...x, done: newDone }),
+        { affectsWorkload: false },
+      );
+    } catch (e) {
+      console.error("toggleDone failed", e);
+      return;
+    }
+    pushHistory({
+      label: "完了切替",
+      do: () =>
+        commitTaskPatch(
+          t.id,
+          { done: newDone },
+          (x) => ({ ...x, done: newDone }),
+          { affectsWorkload: false },
+        ),
+      undo: () =>
+        commitTaskPatch(
+          t.id,
+          { done: oldDone },
+          (x) => ({ ...x, done: oldDone }),
+          { affectsWorkload: false },
+        ),
+    });
   }
+
   async function updateField(t: Task, patch: Record<string, unknown>) {
-    await postJson(`/api/tasks/${t.id}`, patch, "PATCH");
-    mutate(tasksKey);
-    mutate(workloadKey);
+    // API は `"key" in body` で判定し null=明示NULL, キー欠落=更新しない の分離をしている。
+    // 旧値が undefined のキーは oldPatch に含めず、誤って null で上書きしないようにする。
+    const oldPatch: Record<string, unknown> = {};
+    for (const k of Object.keys(patch)) {
+      const v = (t as unknown as Record<string, unknown>)[k];
+      if (v !== undefined) oldPatch[k] = v;
+    }
+    const affectsWorkload =
+      "estimatedHours" in patch ||
+      "assigneeMemberId" in patch ||
+      "weekIso" in patch;
+
+    const applyPatch = (p: Record<string, unknown>) => (x: Task): Task =>
+      ({ ...x, ...p }) as Task;
+
+    try {
+      await commitTaskPatch(t.id, patch, applyPatch(patch), { affectsWorkload });
+    } catch (e) {
+      console.error("updateField failed", e);
+      return;
+    }
+    pushHistory({
+      label: "編集",
+      do: () => commitTaskPatch(t.id, patch, applyPatch(patch), { affectsWorkload }),
+      undo: () =>
+        commitTaskPatch(t.id, oldPatch, applyPatch(oldPatch), { affectsWorkload }),
+    });
   }
+
   async function remove(t: Task) {
     await del(`/api/tasks/${t.id}`);
     mutate(tasksKey);
     mutate(workloadKey);
+  }
+
+  function applyOptimisticOrder(map: Map<number, number>) {
+    return (prev: Task[] = []) =>
+      [...prev]
+        .map((t) => (map.has(t.id) ? { ...t, sortOrder: map.get(t.id)! } : t))
+        .sort(
+          (a, b) =>
+            a.weekIso.localeCompare(b.weekIso) ||
+            a.sortOrder - b.sortOrder ||
+            a.id - b.id,
+        );
+  }
+
+  async function commitReorderMap(map: Map<number, number>) {
+    await mutate<Task[]>(
+      tasksKey,
+      async (current) => {
+        await postJson("/api/tasks/batch", {
+          ops: [...map.entries()].map(([id, sortOrder]) => ({
+            id,
+            patch: { sortOrder },
+          })),
+        });
+        return applyOptimisticOrder(map)(current);
+      },
+      {
+        optimisticData: applyOptimisticOrder(map),
+        rollbackOnError: true,
+        populateCache: true,
+        revalidate: false,
+      },
+    );
   }
 
   const sensors = useSensors(
@@ -257,40 +372,29 @@ export function TaskBoard() {
     if (fromIdx < 0 || toIdx < 0) return;
     const nextOpen = arrayMove(bucket.open, fromIdx, toIdx);
 
-    const idToOrder = new Map(nextOpen.map((t, i) => [t.id, i] as const));
-    const applyOptimistic = (prev: Task[] = []) =>
-      [...prev]
-        .map((t) =>
-          idToOrder.has(t.id) ? { ...t, sortOrder: idToOrder.get(t.id)! } : t,
-        )
-        .sort(
-          (a, b) =>
-            a.weekIso.localeCompare(b.weekIso) ||
-            a.sortOrder - b.sortOrder ||
-            a.id - b.id,
-        );
+    // prev / next とも 0-indexed の連番で送る（対称性確保）。
+    // bucket.open は表示時点の並び順なので、その並びを 0,1,2... に正規化したものが「元の順序」。
+    const prevOrderMap = new Map(
+      bucket.open.map((t, i) => [t.id, i] as const),
+    );
+    const nextOrderMap = new Map(nextOpen.map((t, i) => [t.id, i] as const));
 
     try {
-      await mutate<Task[]>(
-        tasksKey,
-        async (current) => {
-          await postJson("/api/tasks/batch", {
-            ops: nextOpen.map((t, i) => ({
-              id: t.id,
-              patch: { sortOrder: i },
-            })),
-          });
-          return applyOptimistic(current);
-        },
-        {
-          optimisticData: applyOptimistic,
-          rollbackOnError: true,
-          populateCache: true,
-          revalidate: false,
-        },
-      );
+      await commitReorderMap(nextOrderMap);
+      pushHistory({
+        label: "並び替え",
+        do: () => commitReorderMap(nextOrderMap),
+        undo: () => commitReorderMap(prevOrderMap),
+      });
     } catch (e) {
       console.error("taskboard reorder failed", e);
+      // 楽観更新の rollback が SWR 側で非同期に走るため、UI と最新サーバ状態の
+      // 整合を保証するために手動 revalidate を await する
+      try {
+        await mutate(tasksKey);
+      } catch {
+        // 二重失敗は無視
+      }
     }
   }
 
