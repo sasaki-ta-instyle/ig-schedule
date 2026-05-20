@@ -1,13 +1,32 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { addWeeks, currentWeekIso, weekIsoLabel, weekIsoRange } from "@/lib/week";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import type { Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+const ROW_GRID_TASKBOARD = "20px auto 1fr 110px 110px 64px auto";
 
 type Member = { id: number; name: string; color: string };
 type Project = {
@@ -26,6 +45,7 @@ type Task = {
   done: boolean;
   notes: string | null;
   estimatedHours: string | null;
+  sortOrder: number;
 };
 
 const REFRESH_MS = 5000;
@@ -161,6 +181,28 @@ export function TaskBoard() {
     return m;
   }, [filtered]);
 
+  // (projectId, weekIso) ごとに「未完了 → sortOrder → id」「完了は下（done=true）」の順で並べる
+  type WeekBucket = { weekIso: string; open: Task[]; done: Task[] };
+  const groupedByWeek = useMemo(() => {
+    const m: Record<number, WeekBucket[]> = {};
+    for (const projectId of Object.keys(grouped).map(Number)) {
+      const byWeek = new Map<string, WeekBucket>();
+      for (const t of grouped[projectId]) {
+        let b = byWeek.get(t.weekIso);
+        if (!b) {
+          b = { weekIso: t.weekIso, open: [], done: [] };
+          byWeek.set(t.weekIso, b);
+        }
+        (t.done ? b.done : b.open).push(t);
+      }
+      const buckets = [...byWeek.values()].sort((a, b) =>
+        a.weekIso.localeCompare(b.weekIso),
+      );
+      m[projectId] = buckets;
+    }
+    return m;
+  }, [grouped]);
+
   const visibleProjects = useMemo(() => {
     return (projects ?? [])
       .filter((p) => filterProject === "all" || p.id === filterProject)
@@ -194,6 +236,62 @@ export function TaskBoard() {
     await del(`/api/tasks/${t.id}`);
     mutate(tasksKey);
     mutate(workloadKey);
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  async function reorderInWeekGroup(
+    projectId: number,
+    weekIso: string,
+    fromId: number,
+    toId: number,
+  ) {
+    if (fromId === toId) return;
+    const bucket = (groupedByWeek[projectId] ?? []).find((b) => b.weekIso === weekIso);
+    if (!bucket) return;
+    const fromIdx = bucket.open.findIndex((t) => t.id === fromId);
+    const toIdx = bucket.open.findIndex((t) => t.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const nextOpen = arrayMove(bucket.open, fromIdx, toIdx);
+
+    const idToOrder = new Map(nextOpen.map((t, i) => [t.id, i] as const));
+    const applyOptimistic = (prev: Task[] = []) =>
+      [...prev]
+        .map((t) =>
+          idToOrder.has(t.id) ? { ...t, sortOrder: idToOrder.get(t.id)! } : t,
+        )
+        .sort(
+          (a, b) =>
+            a.weekIso.localeCompare(b.weekIso) ||
+            a.sortOrder - b.sortOrder ||
+            a.id - b.id,
+        );
+
+    try {
+      await mutate<Task[]>(
+        tasksKey,
+        async (current) => {
+          await postJson("/api/tasks/batch", {
+            ops: nextOpen.map((t, i) => ({
+              id: t.id,
+              patch: { sortOrder: i },
+            })),
+          });
+          return applyOptimistic(current);
+        },
+        {
+          optimisticData: applyOptimistic,
+          rollbackOnError: true,
+          populateCache: true,
+          revalidate: false,
+        },
+      );
+    } catch (e) {
+      console.error("taskboard reorder failed", e);
+    }
   }
 
   return (
@@ -295,6 +393,16 @@ export function TaskBoard() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {pagedProjects.map((p) => {
               const list = grouped[p.id] ?? [];
+              const buckets = groupedByWeek[p.id] ?? [];
+              const completedTasks = list
+                .filter((t) => t.done)
+                .sort(
+                  (a, b) =>
+                    a.weekIso.localeCompare(b.weekIso) ||
+                    a.sortOrder - b.sortOrder ||
+                    a.id - b.id,
+                );
+              const hasOpen = buckets.some((b) => b.open.length > 0);
               const isCollapsed = trimmedKeyword
                 ? false
                 : !expanded.has(p.id);
@@ -362,118 +470,137 @@ export function TaskBoard() {
                     </span>
                   </button>
                   <div id={panelId} hidden={isCollapsed}>
+                  {isEdit && (
+                    <div style={{ marginBottom: 10 }}>
+                      <NewTaskInline
+                        projectId={p.id}
+                        members={members ?? []}
+                        weeks={weeks}
+                        onCreated={() => mutate(tasksKey)}
+                      />
+                    </div>
+                  )}
                   {list.length === 0 ? (
                     <p className="muted t-small">該当タスクなし</p>
                   ) : (
-                    <ul
-                      className="task-list"
+                    <div
                       style={{
-                        listStyle: "none",
-                        padding: 0,
                         display: "flex",
                         flexDirection: "column",
-                        gap: 2,
+                        gap: 10,
                       }}
                     >
-                      {list.map((t) => (
-                        <li
-                          key={t.id}
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns:
-                              "auto 1fr 110px 110px 64px auto",
-                            alignItems: "center",
-                            gap: 8,
-                            padding: "6px 8px",
-                            borderRadius: "var(--r-sm)",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            className="checkbox"
-                            checked={t.done}
-                            onChange={() => toggleDone(t)}
-                            disabled={!isEdit}
-                          />
-                          {isEdit ? (
-                            <input
-                              className="input editable-only"
-                              defaultValue={t.title}
-                              onBlur={(e) => {
-                                const v = e.currentTarget.value.trim();
-                                if (v && v !== t.title) updateField(t, { title: v });
-                              }}
-                              style={{ fontSize: ".8125rem" }}
-                            />
-                          ) : (
-                            <span
-                              style={{
-                                textDecoration: t.done ? "line-through" : "none",
-                                color: t.done ? "var(--color-text-light)" : undefined,
-                                fontSize: ".8125rem",
-                              }}
-                            >
-                              {t.title}
-                            </span>
-                          )}
-                          <select
-                            className="input editable-only"
-                            value={t.assigneeMemberId ?? ""}
-                            onChange={(e) =>
-                              updateField(t, {
-                                assigneeMemberId: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              })
-                            }
-                            disabled={!isEdit}
+                      {!hasOpen && (
+                        <p className="muted t-small" style={{ padding: "2px 8px" }}>
+                          未完了タスクはありません
+                        </p>
+                      )}
+                      {buckets
+                        .filter((b) => b.open.length > 0)
+                        .map((bucket) => (
+                        <div key={bucket.weekIso}>
+                          <div
                             style={{
-                              fontSize: ".75rem",
-                              padding: "4px 8px",
+                              fontSize: ".6875rem",
+                              color: "var(--color-text-light)",
+                              letterSpacing: ".06em",
+                              textTransform: "uppercase",
+                              padding: "2px 8px 4px",
                             }}
                           >
-                            <option value="">未割当</option>
-                            {members?.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name}
-                              </option>
-                            ))}
-                          </select>
-                          <WeekPicker
-                            weekIso={t.weekIso}
-                            weeks={weeks}
-                            isEdit={isEdit}
-                            onChange={(w) => updateField(t, { weekIso: w })}
-                          />
-                          <HoursCell
-                            value={t.estimatedHours}
-                            isEdit={isEdit}
-                            onChange={(h) => updateField(t, { estimatedHours: h })}
-                          />
-                          {isEdit && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm edit-only"
-                              onClick={() => {
-                                if (confirm(`「${t.title}」を削除しますか？`)) remove(t);
-                              }}
-                              title="削除"
-                              style={{ fontSize: ".75rem" }}
+                            {weekIsoLabel(bucket.weekIso)}
+                          </div>
+                          <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={(e: DragEndEvent) => {
+                              const { active, over } = e;
+                              if (!over) return;
+                              const fromId = Number(active.id);
+                              const toId = Number(over.id);
+                              if (
+                                !Number.isFinite(fromId) ||
+                                !Number.isFinite(toId)
+                              )
+                                return;
+                              void reorderInWeekGroup(
+                                p.id,
+                                bucket.weekIso,
+                                fromId,
+                                toId,
+                              );
+                            }}
+                          >
+                            <SortableContext
+                              items={bucket.open.map((t) => t.id)}
+                              strategy={verticalListSortingStrategy}
                             >
-                              ×
-                            </button>
-                          )}
-                        </li>
+                              <ul
+                                className="task-list"
+                                style={{
+                                  listStyle: "none",
+                                  padding: 0,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 2,
+                                }}
+                              >
+                                {bucket.open.map((t) => (
+                                  <SortableTaskRow
+                                    key={t.id}
+                                    task={t}
+                                    isEdit={isEdit}
+                                    members={members ?? []}
+                                    weeks={weeks}
+                                    onToggleDone={toggleDone}
+                                    onUpdate={updateField}
+                                    onRemove={remove}
+                                  />
+                                ))}
+                              </ul>
+                            </SortableContext>
+                          </DndContext>
+                        </div>
                       ))}
-                    </ul>
-                  )}
-                  {isEdit && (
-                    <NewTaskInline
-                      projectId={p.id}
-                      members={members ?? []}
-                      weeks={weeks}
-                      onCreated={() => mutate(tasksKey)}
-                    />
+                      {completedTasks.length > 0 && (
+                        <div style={{ marginTop: 4 }}>
+                          <div
+                            style={{
+                              fontSize: ".6875rem",
+                              color: "var(--color-text-light)",
+                              letterSpacing: ".06em",
+                              textTransform: "uppercase",
+                              padding: "2px 8px 4px",
+                            }}
+                          >
+                            完了済み（{completedTasks.length}）
+                          </div>
+                          <ul
+                            className="task-list"
+                            style={{
+                              listStyle: "none",
+                              padding: 0,
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 2,
+                            }}
+                          >
+                            {completedTasks.map((t) => (
+                              <DoneTaskRow
+                                key={t.id}
+                                task={t}
+                                isEdit={isEdit}
+                                members={members ?? []}
+                                weeks={weeks}
+                                onToggleDone={toggleDone}
+                                onUpdate={updateField}
+                                onRemove={remove}
+                              />
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   )}
                   </div>
                 </div>
@@ -521,6 +648,235 @@ export function TaskBoard() {
         </div>
       )}
     </section>
+  );
+}
+
+function TaskRowCells({
+  task,
+  isEdit,
+  members,
+  weeks,
+  onToggleDone,
+  onUpdate,
+  onRemove,
+  dimmed,
+}: {
+  task: Task;
+  isEdit: boolean;
+  members: Member[];
+  weeks: string[];
+  onToggleDone: (t: Task) => void;
+  onUpdate: (t: Task, patch: Record<string, unknown>) => void;
+  onRemove: (t: Task) => void;
+  dimmed?: boolean;
+}) {
+  return (
+    <>
+      <input
+        type="checkbox"
+        className="checkbox"
+        checked={task.done}
+        onChange={() => onToggleDone(task)}
+        disabled={!isEdit}
+      />
+      {isEdit ? (
+        <input
+          className="input editable-only"
+          defaultValue={task.title}
+          onBlur={(e) => {
+            const v = e.currentTarget.value.trim();
+            if (v && v !== task.title) onUpdate(task, { title: v });
+          }}
+          style={{
+            fontSize: ".8125rem",
+            opacity: dimmed ? 0.55 : 1,
+          }}
+        />
+      ) : (
+        <span
+          style={{
+            textDecoration: task.done ? "line-through" : "none",
+            color: task.done ? "var(--color-text-light)" : undefined,
+            fontSize: ".8125rem",
+            opacity: dimmed ? 0.6 : 1,
+          }}
+        >
+          {task.title}
+        </span>
+      )}
+      <select
+        className="input editable-only"
+        value={task.assigneeMemberId ?? ""}
+        onChange={(e) =>
+          onUpdate(task, {
+            assigneeMemberId: e.target.value ? Number(e.target.value) : null,
+          })
+        }
+        disabled={!isEdit}
+        style={{ fontSize: ".75rem", padding: "4px 8px", opacity: dimmed ? 0.6 : 1 }}
+      >
+        <option value="">未割当</option>
+        {members.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <WeekPicker
+        weekIso={task.weekIso}
+        weeks={weeks}
+        isEdit={isEdit}
+        onChange={(w) => onUpdate(task, { weekIso: w })}
+      />
+      <HoursCell
+        value={task.estimatedHours}
+        isEdit={isEdit}
+        onChange={(h) => onUpdate(task, { estimatedHours: h })}
+      />
+      {isEdit && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm edit-only"
+          onClick={() => {
+            if (confirm(`「${task.title}」を削除しますか？`)) onRemove(task);
+          }}
+          title="削除"
+          style={{ fontSize: ".75rem" }}
+        >
+          ×
+        </button>
+      )}
+    </>
+  );
+}
+
+function SortableTaskRow({
+  task,
+  isEdit,
+  members,
+  weeks,
+  onToggleDone,
+  onUpdate,
+  onRemove,
+}: {
+  task: Task;
+  isEdit: boolean;
+  members: Member[];
+  weeks: string[];
+  onToggleDone: (t: Task) => void;
+  onUpdate: (t: Task, patch: Record<string, unknown>) => void;
+  onRemove: (t: Task) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style: CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: ROW_GRID_TASKBOARD,
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 8px",
+    borderRadius: "var(--r-sm)",
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    background: isDragging ? "rgba(255,255,255,.42)" : undefined,
+    position: "relative",
+    zIndex: isDragging ? 2 : "auto",
+  };
+
+  return (
+    <li ref={setNodeRef} style={style}>
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label="この行を並び替え"
+        title="ドラッグで並び替え"
+        className="btn btn-ghost btn-sm"
+        style={{
+          padding: "2px 2px",
+          fontSize: ".875rem",
+          lineHeight: 1,
+          color: "var(--color-text-light)",
+          cursor: isDragging ? "grabbing" : "grab",
+          touchAction: "none",
+        }}
+      >
+        ⋮⋮
+      </button>
+      <TaskRowCells
+        task={task}
+        isEdit={isEdit}
+        members={members}
+        weeks={weeks}
+        onToggleDone={onToggleDone}
+        onUpdate={onUpdate}
+        onRemove={onRemove}
+      />
+    </li>
+  );
+}
+
+function DoneTaskRow({
+  task,
+  isEdit,
+  members,
+  weeks,
+  onToggleDone,
+  onUpdate,
+  onRemove,
+}: {
+  task: Task;
+  isEdit: boolean;
+  members: Member[];
+  weeks: string[];
+  onToggleDone: (t: Task) => void;
+  onUpdate: (t: Task, patch: Record<string, unknown>) => void;
+  onRemove: (t: Task) => void;
+}) {
+  return (
+    <li
+      style={{
+        display: "grid",
+        gridTemplateColumns: ROW_GRID_TASKBOARD,
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 8px",
+        borderRadius: "var(--r-sm)",
+        opacity: 0.55,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        title="完了タスクは並び替えできません"
+        style={{
+          fontSize: ".875rem",
+          lineHeight: 1,
+          color: "var(--color-text-light)",
+          textAlign: "center",
+          cursor: "not-allowed",
+        }}
+      >
+        ⋮⋮
+      </span>
+      <TaskRowCells
+        task={task}
+        isEdit={isEdit}
+        members={members}
+        weeks={weeks}
+        onToggleDone={onToggleDone}
+        onUpdate={onUpdate}
+        onRemove={onRemove}
+        dimmed
+      />
+    </li>
   );
 }
 

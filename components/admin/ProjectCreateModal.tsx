@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { postJson } from "@/lib/api";
 import {
   addWeeks,
@@ -10,6 +10,23 @@ import {
 } from "@/lib/week";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import { COMPANIES, type Company } from "@/lib/companies";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Member = { id: number; name: string; color: string };
 
@@ -20,6 +37,18 @@ type DraftTask = {
   notes: string | null;
   estimatedHours: number | null;
 };
+
+type DraftRow = DraftTask & { _localId: string };
+
+const ROW_GRID = "24px 1fr 120px 120px 70px 24px";
+
+function withLocalId(t: DraftTask): DraftRow {
+  return { ...t, _localId: crypto.randomUUID() };
+}
+
+function stripLocalId({ _localId: _omit, ...rest }: DraftRow): DraftTask {
+  return rest;
+}
 
 type StoredProjectDraft = {
   name: string;
@@ -78,7 +107,9 @@ export function ProjectCreateModal({
   const [visibleMemberIds, setVisibleMemberIds] = useState<number[]>(
     initial?.visibleMemberIds ?? [],
   );
-  const [drafts, setDrafts] = useState<DraftTask[]>(initial?.drafts ?? []);
+  const [drafts, setDrafts] = useState<DraftRow[]>(() =>
+    (initial?.drafts ?? []).map(withLocalId),
+  );
   const [rationale, setRationale] = useState<string>(initial?.rationale ?? "");
   const [generating, setGenerating] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -106,7 +137,19 @@ export function ProjectCreateModal({
   }, [generating]);
 
   const draftSnapshot = useMemo<StoredProjectDraft>(
-    () => ({ name, summary, notes, company, dueDate, color, plannedMemberIds, isPrivate, visibleMemberIds, drafts, rationale }),
+    () => ({
+      name,
+      summary,
+      notes,
+      company,
+      dueDate,
+      color,
+      plannedMemberIds,
+      isPrivate,
+      visibleMemberIds,
+      drafts: drafts.map(stripLocalId),
+      rationale,
+    }),
     [name, summary, notes, company, dueDate, color, plannedMemberIds, isPrivate, visibleMemberIds, drafts, rationale],
   );
   const { clear: clearStoredDraft } = useAutosaveDraft(
@@ -148,7 +191,7 @@ export function ProjectCreateModal({
           plannedMemberIds,
         },
       );
-      setDrafts(res.tasks);
+      setDrafts(res.tasks.map(withLocalId));
       setRationale(res.rationale);
     } catch (e) {
       const msg = (e as Error).message ?? "";
@@ -185,7 +228,7 @@ export function ProjectCreateModal({
         plannedMemberIds,
         isPrivate,
         visibleMemberIds: isPrivate ? visibleMemberIds : [],
-        tasks: drafts,
+        tasks: drafts.map(stripLocalId),
         aiSeed: drafts.length
           ? { summary: summary.trim(), dueDate: dueDate || undefined, plannedMemberIds }
           : null,
@@ -208,14 +251,30 @@ export function ProjectCreateModal({
     const lastWeek = drafts[drafts.length - 1]?.weekIso;
     setDrafts((prev) => [
       ...prev,
-      {
+      withLocalId({
         title: "",
         weekIso: lastWeek ?? "",
         assigneeMemberId: plannedMemberIds[0] ?? null,
         notes: null,
         estimatedHours: null,
-      },
+      }),
     ]);
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setDrafts((prev) => {
+      const from = prev.findIndex((d) => d._localId === active.id);
+      const to = prev.findIndex((d) => d._localId === over.id);
+      if (from < 0 || to < 0) return prev;
+      return arrayMove(prev, from, to);
+    });
   }
 
   return (
@@ -528,116 +587,59 @@ export function ProjectCreateModal({
 
         {drafts.length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <ul
-              style={{
-                listStyle: "none",
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-              }}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
             >
-              <li
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 120px 120px 70px 24px",
-                  gap: 8,
-                  padding: "2px 8px",
-                  fontSize: ".6875rem",
-                  color: "var(--color-text-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: ".06em",
-                }}
+              <SortableContext
+                items={drafts.map((d) => d._localId)}
+                strategy={verticalListSortingStrategy}
               >
-                <span>タスク</span>
-                <span>週</span>
-                <span>担当</span>
-                <span>見積</span>
-                <span></span>
-              </li>
-              {drafts.map((d, i) => (
-                <li
-                  key={i}
+                <ul
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 120px 120px 70px 24px",
-                    gap: 8,
-                    alignItems: "center",
-                    padding: 8,
-                    background: "rgba(255,255,255,.32)",
-                    borderRadius: "var(--r-sm)",
+                    listStyle: "none",
+                    padding: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
                   }}
                 >
-                  <input
-                    className="input"
-                    value={d.title}
-                    onChange={(e) => updateDraft(i, { title: e.target.value })}
-                    style={{ fontSize: ".8125rem" }}
-                  />
-                  <select
-                    className="input"
-                    value={d.weekIso}
-                    onChange={(e) =>
-                      updateDraft(i, { weekIso: e.target.value })
-                    }
-                    title={d.weekIso}
-                    style={{ fontSize: ".75rem" }}
+                  <li
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: ROW_GRID,
+                      gap: 8,
+                      padding: "2px 8px",
+                      fontSize: ".6875rem",
+                      color: "var(--color-text-muted)",
+                      textTransform: "uppercase",
+                      letterSpacing: ".06em",
+                    }}
                   >
-                    {!d.weekIso && <option value="">週を選択</option>}
-                    {weekOptions.map((w) => (
-                      <option key={w} value={w}>
-                        {weekIsoLabel(w)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="input"
-                    value={d.assigneeMemberId ?? ""}
-                    onChange={(e) =>
-                      updateDraft(i, {
-                        assigneeMemberId: e.target.value
-                          ? Number(e.target.value)
-                          : null,
-                      })
-                    }
-                    style={{ fontSize: ".75rem" }}
-                  >
-                    <option value="">未割当</option>
-                    {members
-                      .filter((m) => plannedMemberIds.includes(m.id))
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </select>
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    max={40}
-                    step={0.5}
-                    value={d.estimatedHours ?? ""}
-                    onChange={(e) =>
-                      updateDraft(i, {
-                        estimatedHours:
-                          e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                    placeholder="h"
-                    style={{ fontSize: ".75rem", padding: "4px 8px" }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => deleteDraft(i)}
-                    style={{ padding: "2px 6px" }}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    <span aria-hidden="true" />
+                    <span>タスク</span>
+                    <span>週</span>
+                    <span>担当</span>
+                    <span>見積</span>
+                    <span></span>
+                  </li>
+                  {drafts.map((d, i) => (
+                    <SortableDraftRow
+                      key={d._localId}
+                      id={d._localId}
+                      draft={d}
+                      index={i}
+                      members={members}
+                      plannedMemberIds={plannedMemberIds}
+                      weekOptions={weekOptions}
+                      onChange={updateDraft}
+                      onDelete={deleteDraft}
+                    />
+                  ))}
+                </ul>
+              </SortableContext>
+            </DndContext>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -672,5 +674,133 @@ export function ProjectCreateModal({
         </footer>
       </div>
     </div>
+  );
+}
+
+function SortableDraftRow({
+  id,
+  draft,
+  index,
+  members,
+  plannedMemberIds,
+  weekOptions,
+  onChange,
+  onDelete,
+}: {
+  id: string;
+  draft: DraftRow;
+  index: number;
+  members: Member[];
+  plannedMemberIds: number[];
+  weekOptions: string[];
+  onChange: (idx: number, patch: Partial<DraftTask>) => void;
+  onDelete: (idx: number) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style: CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: ROW_GRID,
+    gap: 8,
+    alignItems: "center",
+    padding: 8,
+    background: "rgba(255,255,255,.32)",
+    borderRadius: "var(--r-sm)",
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    zIndex: isDragging ? 2 : "auto",
+    position: "relative",
+  };
+
+  return (
+    <li ref={setNodeRef} style={style}>
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label="この行を並び替え"
+        className="btn btn-ghost btn-sm"
+        style={{
+          padding: "2px 4px",
+          fontSize: ".875rem",
+          lineHeight: 1,
+          color: "var(--color-text-muted)",
+          cursor: isDragging ? "grabbing" : "grab",
+          touchAction: "none",
+        }}
+      >
+        ⋮⋮
+      </button>
+      <input
+        className="input"
+        value={draft.title}
+        onChange={(e) => onChange(index, { title: e.target.value })}
+        style={{ fontSize: ".8125rem" }}
+      />
+      <select
+        className="input"
+        value={draft.weekIso}
+        onChange={(e) => onChange(index, { weekIso: e.target.value })}
+        title={draft.weekIso}
+        style={{ fontSize: ".75rem" }}
+      >
+        {!draft.weekIso && <option value="">週を選択</option>}
+        {weekOptions.map((w) => (
+          <option key={w} value={w}>
+            {weekIsoLabel(w)}
+          </option>
+        ))}
+      </select>
+      <select
+        className="input"
+        value={draft.assigneeMemberId ?? ""}
+        onChange={(e) =>
+          onChange(index, {
+            assigneeMemberId: e.target.value ? Number(e.target.value) : null,
+          })
+        }
+        style={{ fontSize: ".75rem" }}
+      >
+        <option value="">未割当</option>
+        {members
+          .filter((m) => plannedMemberIds.includes(m.id))
+          .map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+      </select>
+      <input
+        className="input"
+        type="number"
+        min={0}
+        max={40}
+        step={0.5}
+        value={draft.estimatedHours ?? ""}
+        onChange={(e) =>
+          onChange(index, {
+            estimatedHours: e.target.value === "" ? null : Number(e.target.value),
+          })
+        }
+        placeholder="h"
+        style={{ fontSize: ".75rem", padding: "4px 8px" }}
+      />
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => onDelete(index)}
+        style={{ padding: "2px 6px" }}
+      >
+        ×
+      </button>
+    </li>
   );
 }
