@@ -918,6 +918,7 @@ function TaskRow({
 }) {
   return (
     <li
+      title={project?.name}
       style={{
         display: "flex",
         alignItems: "flex-start",
