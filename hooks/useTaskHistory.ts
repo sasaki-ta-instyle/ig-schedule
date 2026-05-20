@@ -42,8 +42,10 @@ export function useTaskHistory() {
     const onKeyDown = (e: KeyboardEvent) => {
       const isMod = e.metaKey || e.ctrlKey;
       if (!isMod) return;
-      // 物理キー位置で判定（レイアウト / CapsLock の影響を受けない）
-      if (e.code !== "KeyZ") return;
+      // 物理キー位置（e.code）で判定するのが基本だが、ブラウザ / キーボードレイアウトに
+      // よっては e.code が "KeyZ" 以外になる環境がある（macOS の一部 JIS / 特殊配列等）。
+      // 取りこぼし防止のため e.key の "z" / "Z" もフォールバックで受け付ける。
+      if (e.code !== "KeyZ" && e.key !== "z" && e.key !== "Z") return;
       if (e.isComposing || e.keyCode === 229) return;
       if (isEditableTarget(e.target)) return;
       if (isApplyingRef.current) {
