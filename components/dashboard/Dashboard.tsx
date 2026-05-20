@@ -1,7 +1,8 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   addWeeks,
   currentWeekIso,
@@ -916,9 +917,24 @@ function TaskRow({
   onShiftPrev?: () => void;
   onShiftNext?: () => void;
 }) {
+  const liRef = useRef<HTMLLIElement>(null);
+  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
+  const projectLabel = project?.name ?? "";
+  function showTip() {
+    if (!projectLabel) return;
+    const r = liRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setTip({ x: r.left, y: r.bottom + 4 });
+  }
+  function hideTip() {
+    setTip(null);
+  }
+
   return (
     <li
-      title={project?.name}
+      ref={liRef}
+      onMouseEnter={showTip}
+      onMouseLeave={hideTip}
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -934,6 +950,36 @@ function TaskRow({
         onChange={onToggle}
         disabled={!isEdit}
       />
+      {tip &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              left: tip.x,
+              top: tip.y,
+              zIndex: 9999,
+              pointerEvents: "none",
+              padding: "4px 8px",
+              borderRadius: "var(--r-sm)",
+              background: "rgba(255,255,255,.78)",
+              backdropFilter: "blur(14px) saturate(1.3)",
+              WebkitBackdropFilter: "blur(14px) saturate(1.3)",
+              border: "1px solid rgba(255,255,255,.55)",
+              boxShadow: "0 6px 18px rgba(53,54,45,.10)",
+              color: "var(--color-text)",
+              fontSize: ".6875rem",
+              lineHeight: 1.3,
+              whiteSpace: "nowrap",
+              maxWidth: 320,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {projectLabel}
+          </div>,
+          document.body,
+        )}
       <div style={{ flex: 1, minWidth: 0 }}>
         {project?.company && (
           <span style={{ marginRight: 5, verticalAlign: "middle" }}>
