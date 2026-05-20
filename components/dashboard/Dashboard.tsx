@@ -14,6 +14,7 @@ import { WORK_RULES } from "@/lib/work-rules";
 import { fetcher, postJson } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
+import { useTaskHistory } from "@/hooks/useTaskHistory";
 import type { Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
 import {
@@ -84,6 +85,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
   const { data: workload } = useSWR<Workload[]>(workloadKey, fetcher, {
     refreshInterval: archived ? 0 : REFRESH_MS,
   });
+  const { pushHistory } = useTaskHistory();
   const recurringKey = archived ? null : "/api/recurring-tasks";
   const { data: recurring } = useSWR<RecurringTaskDTO[]>(recurringKey, fetcher, {
     refreshInterval: REFRESH_MS,
@@ -258,38 +260,32 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     return Array.from(map.values());
   }
 
-  async function shiftWeek(task: Task, delta: -1 | 1) {
-    const targetWeek = addWeeks(task.weekIso, delta);
-    const hours = task.estimatedHours ? Number(task.estimatedHours) : 0;
-    const movesWorkload =
-      task.assigneeMemberId != null && hours > 0;
-
-    // tasks の楽観的更新: async fn 内で PATCH を完了させ、その後 revalidate を1回だけ走らせる
-    try {
-      await mutate(
-        tasksKey,
-        async () => {
-          await postJson(
-            `/api/tasks/${task.id}`,
-            { weekIso: targetWeek },
-            "PATCH",
-          );
-          return undefined; // 終了後に再フェッチを走らせる
-        },
-        {
-          optimisticData: (prev: Task[] | undefined) =>
-            (prev ?? []).map((t) =>
-              t.id === task.id ? { ...t, weekIso: targetWeek } : t,
-            ),
-          rollbackOnError: true,
-          populateCache: false,
-          revalidate: true,
-        },
-      );
-    } catch (e) {
-      console.error("shift failed", e);
-    }
-    // workload も in-flight 中はクロッバーされないように optimisticData で更新
+  // taskId の weekIso を fromWeek → toWeek へ変えるコアコミット。
+  // do / undo どちらでも同じ実装で動かすため fromWeek を引数で受ける。
+  async function commitWeekChange(
+    taskId: number,
+    fromWeek: string,
+    toWeek: string,
+    memberId: number | null,
+    hours: number,
+  ) {
+    await mutate(
+      tasksKey,
+      async () => {
+        await postJson(`/api/tasks/${taskId}`, { weekIso: toWeek }, "PATCH");
+        return undefined;
+      },
+      {
+        optimisticData: (prev: Task[] | undefined) =>
+          (prev ?? []).map((t) =>
+            t.id === taskId ? { ...t, weekIso: toWeek } : t,
+          ),
+        rollbackOnError: true,
+        populateCache: false,
+        revalidate: true,
+      },
+    );
+    const movesWorkload = memberId != null && hours > 0;
     if (movesWorkload) {
       mutate(
         workloadKey,
@@ -297,12 +293,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
         {
           optimisticData: (prev: Workload[] | undefined) =>
             applyWorkloadDelta(prev ?? [], [
-              {
-                memberId: task.assigneeMemberId!,
-                fromWeek: task.weekIso,
-                toWeek: targetWeek,
-                hours,
-              },
+              { memberId, fromWeek, toWeek, hours },
             ]),
           rollbackOnError: true,
           populateCache: false,
@@ -312,6 +303,24 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     } else {
       mutate(workloadKey);
     }
+  }
+
+  async function shiftWeek(task: Task, delta: -1 | 1) {
+    const fromWeek = task.weekIso;
+    const toWeek = addWeeks(fromWeek, delta);
+    const hours = task.estimatedHours ? Number(task.estimatedHours) : 0;
+    const memberId = task.assigneeMemberId;
+    try {
+      await commitWeekChange(task.id, fromWeek, toWeek, memberId, hours);
+    } catch (e) {
+      console.error("shift failed", e);
+      return;
+    }
+    pushHistory({
+      label: "週移動",
+      do: () => commitWeekChange(task.id, fromWeek, toWeek, memberId, hours),
+      undo: () => commitWeekChange(task.id, toWeek, fromWeek, memberId, hours),
+    });
   }
 
   async function shiftAllUnfinishedToNextWeek(cellTasks: Task[]) {
@@ -368,6 +377,41 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     mutate(workloadKey);
   }
 
+  function applyOptimisticOrder(map: Map<number, number>) {
+    return (prev: Task[] = []) =>
+      [...prev]
+        .map((t) =>
+          map.has(t.id) ? { ...t, sortOrder: map.get(t.id)! } : t,
+        )
+        .sort(
+          (a, b) =>
+            a.weekIso.localeCompare(b.weekIso) ||
+            a.sortOrder - b.sortOrder ||
+            a.id - b.id,
+        );
+  }
+
+  async function commitReorderMap(map: Map<number, number>) {
+    await mutate<Task[]>(
+      tasksKey,
+      async (current) => {
+        await postJson("/api/tasks/batch", {
+          ops: [...map.entries()].map(([id, sortOrder]) => ({
+            id,
+            patch: { sortOrder },
+          })),
+        });
+        return applyOptimisticOrder(map)(current);
+      },
+      {
+        optimisticData: applyOptimisticOrder(map),
+        rollbackOnError: true,
+        populateCache: true,
+        revalidate: false,
+      },
+    );
+  }
+
   async function reorderInCell(
     cellTasks: Task[],
     index: number,
@@ -379,45 +423,26 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     const [moved] = next.splice(index, 1);
     next.splice(target, 0, moved);
 
-    const idToOrder = new Map(next.map((t, i) => [t.id, i] as const));
-    const applyOptimistic = (prev: Task[] = []) => {
-      const updated = prev.map((t) =>
-        idToOrder.has(t.id)
-          ? { ...t, sortOrder: idToOrder.get(t.id)! }
-          : t,
-      );
-      return [...updated].sort(
-        (a, b) =>
-          a.weekIso.localeCompare(b.weekIso) ||
-          a.sortOrder - b.sortOrder ||
-          a.id - b.id,
-      );
-    };
+    // prev / next とも cellTasks の表示順を 0-indexed に正規化（対称性確保）。
+    const prevOrderMap = new Map(cellTasks.map((t, i) => [t.id, i] as const));
+    const nextOrderMap = new Map(next.map((t, i) => [t.id, i] as const));
 
     try {
-      // SWR の optimisticData パターンで、refreshInterval によるバックグラウンド
-      // 再フェッチが POST 中に古いデータでキャッシュを上書きしないようにする
-      await mutate<Task[]>(
-        tasksKey,
-        async (current) => {
-          await postJson("/api/tasks/batch", {
-            ops: next.map((t, i) => ({
-              id: t.id,
-              patch: { sortOrder: i },
-            })),
-          });
-          return applyOptimistic(current);
-        },
-        {
-          optimisticData: applyOptimistic,
-          rollbackOnError: true,
-          populateCache: true,
-          revalidate: false,
-        },
-      );
+      await commitReorderMap(nextOrderMap);
     } catch (e) {
       console.error("reorder failed", e);
+      try {
+        await mutate(tasksKey);
+      } catch {
+        // 二重失敗は無視
+      }
+      return;
     }
+    pushHistory({
+      label: "順序移動",
+      do: () => commitReorderMap(nextOrderMap),
+      undo: () => commitReorderMap(prevOrderMap),
+    });
   }
 
   return (
