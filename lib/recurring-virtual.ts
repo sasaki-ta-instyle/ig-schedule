@@ -1,3 +1,21 @@
+import { weekIsoMonday } from "@/lib/week";
+
+export const RECURRENCE_TYPES = ["weekly", "monthly"] as const;
+export type RecurrenceType = (typeof RECURRENCE_TYPES)[number];
+
+// 「その月で最初の月曜日を含む ISO 週」かどうかを判定する。
+// 月曜の日付が 1〜7 のときに限り、その週が当月最初の月曜を含む = 月次タスクを出す週。
+export function isFirstWeekOfMonth(weekIso: string): boolean {
+  const day = weekIsoMonday(weekIso).getUTCDate();
+  return day >= 1 && day <= 7;
+}
+
+function shouldShowForRecurrence(type: string, weekIso: string): boolean {
+  if (type === "weekly") return true;
+  if (type === "monthly") return isFirstWeekOfMonth(weekIso);
+  return false;
+}
+
 export type RecurringTaskDTO = {
   id: number;
   title: string;
@@ -46,8 +64,8 @@ export function buildVirtualRecurringTasks(
   const out: VirtualRecurringTask[] = [];
   for (const r of recurring) {
     if (r.archivedAt) continue;
-    if (r.recurrenceType !== "weekly") continue;
     for (const w of weeks) {
+      if (!shouldShowForRecurrence(r.recurrenceType, w)) continue;
       out.push({
         kind: "recurring",
         id: virtualRecurringId(r.id, w),
@@ -76,11 +94,11 @@ export function recurringHoursByMemberWeek(
   const out: Record<string, number> = {};
   for (const r of recurring) {
     if (r.archivedAt) continue;
-    if (r.recurrenceType !== "weekly") continue;
     if (r.assigneeMemberId == null) continue;
     const h = r.estimatedHours == null ? 0 : Number(r.estimatedHours);
     if (!Number.isFinite(h) || h <= 0) continue;
     for (const w of weeks) {
+      if (!shouldShowForRecurrence(r.recurrenceType, w)) continue;
       const k = `${r.assigneeMemberId}::${w}`;
       out[k] = (out[k] ?? 0) + h;
     }

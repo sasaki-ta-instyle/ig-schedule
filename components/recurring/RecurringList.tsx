@@ -233,8 +233,8 @@ export function RecurringList() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: isEdit
-                    ? "1fr 120px 64px auto auto"
-                    : "1fr 120px 64px auto",
+                    ? "1fr 96px 120px 64px auto auto"
+                    : "1fr 64px 120px 64px auto",
                   alignItems: "center",
                   gap: 8,
                   padding: "8px 8px",
@@ -257,6 +257,27 @@ export function RecurringList() {
                   />
                 ) : (
                   <span style={{ fontSize: ".8125rem" }}>{r.title}</span>
+                )}
+                {isEdit ? (
+                  <select
+                    className="input editable-only"
+                    value={r.recurrenceType}
+                    onChange={(e) =>
+                      updateField(r, { recurrenceType: e.target.value })
+                    }
+                    style={{ fontSize: ".75rem", padding: "4px 8px" }}
+                    aria-label="繰り返し"
+                  >
+                    <option value="weekly">毎週</option>
+                    <option value="monthly">毎月</option>
+                  </select>
+                ) : (
+                  <span
+                    className="t-small mono muted"
+                    style={{ textAlign: "center" }}
+                  >
+                    {r.recurrenceType === "monthly" ? "月次" : "週次"}
+                  </span>
                 )}
                 <select
                   className="input editable-only"
@@ -426,6 +447,9 @@ function NewRecurringInline({
   const [title, setTitle] = useState("");
   const [assigneeId, setAssigneeId] = useState<number | "">("");
   const [hours, setHours] = useState<string>("");
+  const [recurrenceType, setRecurrenceType] = useState<"weekly" | "monthly">(
+    "weekly",
+  );
   const [pending, setPending] = useState(false);
 
   return (
@@ -448,11 +472,13 @@ function NewRecurringInline({
           await postJson("/api/recurring-tasks", {
             title: title.trim(),
             assigneeMemberId: assigneeId === "" ? null : assigneeId,
+            recurrenceType,
             estimatedHours: h != null && Number.isFinite(h) ? h : null,
           });
           setTitle("");
           setHours("");
           setAssigneeId("");
+          setRecurrenceType("weekly");
           onCreated();
         } finally {
           setPending(false);
@@ -466,6 +492,18 @@ function NewRecurringInline({
         onChange={(e) => setTitle(e.target.value)}
         style={{ flex: 1, fontSize: ".8125rem" }}
       />
+      <select
+        className="input"
+        value={recurrenceType}
+        onChange={(e) =>
+          setRecurrenceType(e.target.value as "weekly" | "monthly")
+        }
+        style={{ width: 96, fontSize: ".75rem" }}
+        aria-label="繰り返し"
+      >
+        <option value="weekly">毎週</option>
+        <option value="monthly">毎月</option>
+      </select>
       <select
         className="input"
         value={assigneeId}

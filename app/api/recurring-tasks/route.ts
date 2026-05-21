@@ -11,7 +11,7 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ALLOWED_RECURRENCE = new Set<string>(["weekly"]);
+const ALLOWED_RECURRENCE = new Set<string>(["weekly", "monthly"]);
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
