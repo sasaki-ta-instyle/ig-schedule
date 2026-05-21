@@ -22,17 +22,6 @@ type Project = {
   plannedMemberIds: number[];
 };
 
-const COLORS = [
-  "#38537B",
-  "#7BB785",
-  "#D4772C",
-  "#A86B91",
-  "#5C8FA8",
-  "#8A7B5C",
-  "#9C1212",
-  "#2F6F3A",
-];
-
 const PAGE_SIZE_STORAGE_KEY = "ig-schedule:admin-projects-page-size";
 const PROJECT_EXPANDED_STORAGE_KEY = "ig-schedule:admin-project-expanded";
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -521,36 +510,16 @@ function ProjectRow({
             aria-label={`${p.name} を選択`}
           />
         )}
-        {isEdit ? (
-          <input
-            type="color"
-            value={p.color}
-            onChange={(e) => onUpdate({ color: e.target.value })}
-            style={{
-              width: 28,
-              height: 28,
-              border: "1px solid rgba(255,255,255,.7)",
-              borderRadius: 999,
-              background: "transparent",
-              cursor: "pointer",
-            }}
-            list={`palette-${p.id}`}
-          />
-        ) : (
-          <span
-            style={{
-              width: 12,
-              height: 12,
-              borderRadius: 999,
-              background: p.color,
-            }}
-          />
-        )}
-        <datalist id={`palette-${p.id}`}>
-          {COLORS.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
+        <span
+          aria-label={`主担当の色 ${p.color}`}
+          title="主担当の色（自動）"
+          style={{
+            width: 12,
+            height: 12,
+            borderRadius: 999,
+            background: p.color,
+          }}
+        />
 
         {isEdit ? (
           <input

@@ -1,10 +1,9 @@
 import { db, schema } from "@/db/client";
-import { and, asc, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   clampHours,
   isPositiveIntArray,
-  isValidColor,
   isValidProjectStatus,
   isValidWeekIso,
   sanitizeText,
@@ -75,7 +74,6 @@ export async function POST(req: Request) {
     typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
       ? body.dueDate
       : null;
-  const color = isValidColor(body.color) ? body.color : "#38537B";
   const status = isValidProjectStatus(body.status) ? body.status : "active";
   const company = isKnownCompany(body.company) ? body.company : null;
   const plannedMemberIds = isPositiveIntArray(body.plannedMemberIds)
@@ -138,6 +136,16 @@ export async function POST(req: Request) {
       : null;
 
   const project = await db.transaction(async (tx) => {
+    let color = "#38537B";
+    if (plannedMemberIds.length > 0) {
+      const [primary] = await tx
+        .select({ color: schema.members.color })
+        .from(schema.members)
+        .where(eq(schema.members.id, plannedMemberIds[0]))
+        .limit(1);
+      if (primary?.color) color = primary.color;
+    }
+
     const [projectRow] = await tx
       .insert(schema.projects)
       .values({

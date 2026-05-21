@@ -56,7 +56,6 @@ type StoredProjectDraft = {
   notes: string;
   company: Company | "";
   dueDate: string;
-  color: string;
   plannedMemberIds: number[];
   isPrivate: boolean;
   visibleMemberIds: number[];
@@ -72,15 +71,6 @@ type GenerateResponse = {
   rationale: string;
   meta: { startWeek: string; endWeek: string; model: string };
 };
-
-const COLORS = [
-  "#38537B",
-  "#7BB785",
-  "#D4772C",
-  "#A86B91",
-  "#5C8FA8",
-  "#8A7B5C",
-];
 
 export function ProjectCreateModal({
   members,
@@ -99,7 +89,6 @@ export function ProjectCreateModal({
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [company, setCompany] = useState<Company | "">(initial?.company ?? "");
   const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
-  const [color, setColor] = useState(initial?.color ?? COLORS[0]);
   const [plannedMemberIds, setPlannedMemberIds] = useState<number[]>(
     initial?.plannedMemberIds ?? [],
   );
@@ -143,14 +132,13 @@ export function ProjectCreateModal({
       notes,
       company,
       dueDate,
-      color,
       plannedMemberIds,
       isPrivate,
       visibleMemberIds,
       drafts: drafts.map(stripLocalId),
       rationale,
     }),
-    [name, summary, notes, company, dueDate, color, plannedMemberIds, isPrivate, visibleMemberIds, drafts, rationale],
+    [name, summary, notes, company, dueDate, plannedMemberIds, isPrivate, visibleMemberIds, drafts, rationale],
   );
   const { clear: clearStoredDraft } = useAutosaveDraft(
     DRAFT_KEY,
@@ -224,7 +212,6 @@ export function ProjectCreateModal({
         notes: notes.trim(),
         company: company || null,
         dueDate: dueDate || null,
-        color,
         plannedMemberIds,
         isPrivate,
         visibleMemberIds: isPrivate ? visibleMemberIds : [],
@@ -383,30 +370,6 @@ export function ProjectCreateModal({
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                 />
-              </div>
-              <div>
-                <label className="form-label">カラー</label>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setColor(c)}
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 999,
-                        background: c,
-                        border:
-                          c === color
-                            ? "2px solid var(--color-text)"
-                            : "2px solid transparent",
-                        cursor: "pointer",
-                      }}
-                      aria-label={`color ${c}`}
-                    />
-                  ))}
-                </div>
               </div>
             </div>
           </div>

@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   isPositiveIntArray,
-  isValidColor,
   isValidProjectStatus,
   sanitizeText,
   TEXT_LIMITS,
@@ -66,12 +65,6 @@ export async function PATCH(
       );
     }
   }
-  if ("color" in body) {
-    if (!isValidColor(body.color)) {
-      return NextResponse.json({ error: "invalid color" }, { status: 400 });
-    }
-    update.color = body.color;
-  }
   if ("company" in body) {
     if (body.company === null || body.company === "") {
       update.company = null;
@@ -97,7 +90,16 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    update.plannedMemberIds = body.plannedMemberIds;
+    const ids = body.plannedMemberIds as number[];
+    update.plannedMemberIds = ids;
+    if (ids.length > 0) {
+      const [primary] = await db
+        .select({ color: schema.members.color })
+        .from(schema.members)
+        .where(eq(schema.members.id, ids[0]))
+        .limit(1);
+      if (primary?.color) update.color = primary.color;
+    }
   }
   if ("visibleMemberIds" in body) {
     if (!isPositiveIntArray(body.visibleMemberIds)) {
