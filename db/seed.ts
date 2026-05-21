@@ -7,9 +7,9 @@ import { sql } from "drizzle-orm";
 import { members } from "./schema";
 
 const SEED_MEMBERS = [
-  { name: "佐々木", color: "#39FF14", role: null },
-  { name: "田邉",   color: "#B94047", role: null },
-  { name: "山田",   color: "#FF7F00", role: null },
+  { name: "佐々木", color: "#1E8E3E", role: null },
+  { name: "田邉",   color: "#C8102E", role: null },
+  { name: "山田",   color: "#E55B00", role: null },
   { name: "中野",   color: "#F8B500", role: null },
   { name: "柏木",   color: "#FF1493", role: null },
   { name: "和田",   color: "#8A7B5C", role: null },
