@@ -64,6 +64,13 @@
       "when": 1779431000000,
       "tag": "0008_yamada_lead_projects_violet",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779431500000,
+      "tag": "0009_sasaki_green_brighter",
+      "breakpoints": true
     }
   ]
 }
