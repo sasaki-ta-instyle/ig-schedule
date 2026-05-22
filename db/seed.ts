@@ -15,7 +15,7 @@ const SEED_MEMBERS = [
   { name: "山田",   color: "#E55B00", role: null, isAdmin: false },
   { name: "中野",   color: "#F8B500", role: null, isAdmin: false },
   { name: "柏木",   color: "#FF1493", role: null, isAdmin: false },
-  { name: "和田",   color: "#8A7B5C", role: null, isAdmin: false },
+  { name: "和田",   color: "#1A73E8", role: null, isAdmin: false },
 ];
 
 async function main() {

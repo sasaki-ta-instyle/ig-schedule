@@ -43,6 +43,13 @@
       "when": 1779429566885,
       "tag": "0005_flippant_micromax",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779430000000,
+      "tag": "0006_wada_blue",
+      "breakpoints": true
     }
   ]
 }
