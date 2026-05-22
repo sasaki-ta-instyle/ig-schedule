@@ -8,6 +8,7 @@ import {
   numeric,
   date,
   jsonb,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -45,23 +46,31 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const tasks = pgTable("tasks", {
-  id: serial("id").primaryKey(),
-  projectId: integer("project_id")
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  assigneeMemberId: integer("assignee_member_id").references(() => members.id, {
-    onDelete: "set null",
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    assigneeMemberId: integer("assignee_member_id").references(() => members.id, {
+      onDelete: "set null",
+    }),
+    weekIso: text("week_iso").notNull(),
+    done: boolean("done").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    notes: text("notes"),
+    estimatedHours: numeric("estimated_hours", { precision: 7, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    projectIdIdx: index("tasks_project_id_idx").on(t.projectId),
+    assigneeIdx: index("tasks_assignee_member_id_idx").on(t.assigneeMemberId),
+    weekIsoIdx: index("tasks_week_iso_idx").on(t.weekIso),
   }),
-  weekIso: text("week_iso").notNull(),
-  done: boolean("done").notNull().default(false),
-  sortOrder: integer("sort_order").notNull().default(0),
-  notes: text("notes"),
-  estimatedHours: numeric("estimated_hours", { precision: 5, scale: 2 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+);
 
 export const workload = pgTable(
   "workload",
@@ -71,7 +80,7 @@ export const workload = pgTable(
       .notNull()
       .references(() => members.id, { onDelete: "cascade" }),
     weekIso: text("week_iso").notNull(),
-    plannedHours: numeric("planned_hours", { precision: 5, scale: 2 })
+    plannedHours: numeric("planned_hours", { precision: 7, scale: 2 })
       .notNull()
       .default("0"),
     note: text("note"),
@@ -79,6 +88,7 @@ export const workload = pgTable(
   },
   (t) => ({
     memberWeekUnique: uniqueIndex("workload_member_week_unique").on(t.memberId, t.weekIso),
+    weekIsoIdx: index("workload_week_iso_idx").on(t.weekIso),
   }),
 );
 
@@ -94,20 +104,26 @@ export const sessions = pgTable("sessions", {
   label: text("label"),
 });
 
-export const recurringTasks = pgTable("recurring_tasks", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  assigneeMemberId: integer("assignee_member_id").references(() => members.id, {
-    onDelete: "set null",
+export const recurringTasks = pgTable(
+  "recurring_tasks",
+  {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    assigneeMemberId: integer("assignee_member_id").references(() => members.id, {
+      onDelete: "set null",
+    }),
+    recurrenceType: text("recurrence_type").notNull().default("weekly"),
+    estimatedHours: numeric("estimated_hours", { precision: 7, scale: 2 }),
+    notes: text("notes"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    assigneeIdx: index("recurring_tasks_assignee_member_id_idx").on(t.assigneeMemberId),
   }),
-  recurrenceType: text("recurrence_type").notNull().default("weekly"),
-  estimatedHours: numeric("estimated_hours", { precision: 5, scale: 2 }),
-  notes: text("notes"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  archivedAt: timestamp("archived_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+);
 
 export const recurringTaskCompletions = pgTable(
   "recurring_task_completions",

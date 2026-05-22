@@ -101,19 +101,26 @@ pm2 reload app-ig-schedule --update-env
 
 ## 仕様メモ（実装方針）
 
-- 認証なし。ヘッダの **プレビュー / 編集** トグル（localStorage 永続）だけで書込み UI を切替
+- **認証あり（書込みのみ）**。GET/HEAD/OPTIONS は無認証で誰でも閲覧可、PUT/POST/PATCH/DELETE は `lib/auth.ts` の cookie セッション必須
+  - フロントは「プレビュー / 編集」トグル（localStorage 永続）で edit UI 露出を切替えるが、これは UX 上の見た目だけで、書込みは必ずサーバ側で `middleware.ts` が cookie を検証する
+  - cookie 発行は `POST /api/auth/edit-check`（メンバー個別パスワード or `ADMIN_PASSWORD` env で発行）
+  - admin パスワードが未設定だとフォールバック値 `1111` で通る（C-2 / 本番では env を必ず設定）
 - メンバーは固定 6 名（佐々木 / 田邉 / 山田 / 中野 / 柏木 / 和田）— `db/seed.ts` で投入、追加は seed を編集
+- 1 番目（佐々木）が `isAdmin=true`。`AdminMemberPasswordsModal` 等 admin 限定 UI のため最低 1 人は admin が必要
+- プロジェクト可視性: `isPrivate=true` のプロジェクトは、未ログイン or `plannedMemberIds` / `visibleMemberIds` に居ない閲覧者から `/api/projects` / `/api/tasks` / `/api/workload` のすべてで隠れる
 - 週単位（`weekIso` = `YYYY-Www`, 月曜起算 ISO 8601）
-- 工数は 1 人 × 1 週の総工数(h) を `workload` テーブルに 1 件持つ
+- 工数は 1 人 × 1 週の総工数(h) を `workload` テーブルに 1 件持つ（`numeric(7,2)` まで対応）
 - タスクはチェックボックスのみ（`tasks.done`）
-- 稼働ルール: 平日のみ / 1 日実働 7.5h / MTG 週 5h 控除 / 通常週 32.5h / 祝日週は自動減算 / 月残業 11h まで
-- AI タスク生成: `POST /api/ai/generate-tasks` で Claude API を呼ぶ。API キーはサーバ側 `ANTHROPIC_API_KEY` のみ
-- DB: Neon Postgres (Vercel Marketplace 経由)。Drizzle ORM。`pnpm migrate` / `pnpm seed`
+- 定例タスク: weekly は毎週、monthly は **「月曜が当月 1〜7 日にある週」のみ**表示（`lib/recurring-virtual.ts`）。月初が金〜日のときは翌週初出になる仕様
+- 稼働ルール: 平日のみ / 1 日実働 7.5h / MTG 週 5h 控除 / 通常週 32.5h / 祝日週は自動減算 / 月残業 11h まで（祝日マスタは `lib/holidays-data.ts`、2028 まで投入済み）
+- AI タスク生成: `POST /api/ai/generate-tasks` で Claude API を呼ぶ。API キーはサーバ側 `ANTHROPIC_API_KEY` のみ。ユーザー入力は `<user_input>` タグで囲ってプロンプト中の指示と分離
+- DB: Neon Postgres (Vercel Marketplace 経由)。Drizzle ORM。`pnpm db:generate` → `pnpm migrate` → `pnpm seed`
 
 ## 環境変数
 
 | キー | 用途 | 必須 |
 |---|---|---|
 | `DATABASE_URL` | Neon Postgres 接続文字列 | ✓ |
+| `ADMIN_PASSWORD` | 編集モードの admin パスワード。未設定だと `1111` が通る（本番では必ず設定） | ✓ |
 | `ANTHROPIC_API_KEY` | AI タスク生成 | △（AI 機能を使う場合） |
 

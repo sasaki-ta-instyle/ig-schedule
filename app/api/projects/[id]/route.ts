@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   isPositiveIntArray,
+  isValidIsoDate,
   isValidProjectStatus,
   sanitizeText,
   TEXT_LIMITS,
@@ -53,14 +54,11 @@ export async function PATCH(
   if ("dueDate" in body) {
     if (body.dueDate === null) {
       update.dueDate = null;
-    } else if (
-      typeof body.dueDate === "string" &&
-      /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
-    ) {
+    } else if (isValidIsoDate(body.dueDate)) {
       update.dueDate = body.dueDate;
     } else {
       return NextResponse.json(
-        { error: "dueDate must be YYYY-MM-DD or null" },
+        { error: "dueDate must be a valid YYYY-MM-DD date or null" },
         { status: 400 },
       );
     }

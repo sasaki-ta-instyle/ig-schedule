@@ -26,6 +26,31 @@ export const HOURS_LIMITS = {
 
 const WEEK_ISO_RE = /^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * `YYYY-MM-DD` 形式かつ実在する日付かを判定する。
+ * - 旧実装は regex のみで `2025-13-45` のような不正日付を通していた
+ * - 通った後 `new Date(dueDate)` が Invalid Date になり、`toWeekIso` 経由で NaN を撒く事故が起きうるため、
+ *   API 境界でここで弾く（M-4）
+ */
+export function isValidIsoDate(s: unknown): s is string {
+  if (typeof s !== "string") return false;
+  const m = s.match(ISO_DATE_RE);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12) return false;
+  if (d < 1 || d > 31) return false;
+  // 月末日チェック（うるう年も含む round-trip 比較）
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === mo - 1 &&
+    date.getUTCDate() === d
+  );
+}
 
 export function isValidWeekIso(s: unknown): s is string {
   if (typeof s !== "string" || !WEEK_ISO_RE.test(s)) return false;

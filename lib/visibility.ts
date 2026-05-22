@@ -32,3 +32,13 @@ export async function getVisibleProjectIds(memberId: number | null): Promise<num
     .where(visibilityCondition(memberId));
   return rows.map((r) => r.id);
 }
+
+/**
+ * 「閲覧者から見えない（非公開かつ自分が plannedMemberIds/visibleMemberIds に居ない）」
+ * プロジェクト ID を返す。`workload` の集計値から、非公開プロジェクトのタスク分を差し引くために使う。
+ */
+export async function getHiddenProjectIds(memberId: number | null): Promise<number[]> {
+  const allRows = await db.select({ id: schema.projects.id }).from(schema.projects);
+  const visible = new Set(await getVisibleProjectIds(memberId));
+  return allRows.map((r) => r.id).filter((id) => !visible.has(id));
+}

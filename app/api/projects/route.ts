@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import {
   clampHours,
   isPositiveIntArray,
+  isValidIsoDate,
   isValidProjectStatus,
   isValidWeekIso,
   sanitizeText,
@@ -70,10 +71,7 @@ export async function POST(req: Request) {
   const notes = sanitizeText(body.notes, TEXT_LIMITS.projectNotes, {
     allowEmpty: true,
   }) ?? "";
-  const dueDate =
-    typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
-      ? body.dueDate
-      : null;
+  const dueDate = isValidIsoDate(body.dueDate) ? body.dueDate : null;
   const status = isValidProjectStatus(body.status) ? body.status : "active";
   const company = isKnownCompany(body.company) ? body.company : null;
   const plannedMemberIds = isPositiveIntArray(body.plannedMemberIds)

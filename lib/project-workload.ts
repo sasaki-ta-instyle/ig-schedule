@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -19,45 +19,68 @@ export type WorkloadBucket = {
  *
  * 注: 手動で workload を編集していた場合、対象バケットの値はクロッバーされる。
  * 「プロジェクトを消したのに工数が 0 にならない」という直感に合わせるためのトレードオフ。
+ *
+ * 実装メモ (M-3): 旧実装はバケット数だけ SELECT + UPSERT を直列実行していた。
+ * 影響バケットが数十〜数百になるプロジェクト削除時にトランザクションが長く開いていたため、
+ * GROUP BY での一括集計 + INSERT ... ON CONFLICT で 2 クエリにまとめている。
  */
 export async function recomputeWorkloadBuckets(
   tx: Tx,
   buckets: Map<string, WorkloadBucket>,
 ) {
-  for (const b of buckets.values()) {
-    const [agg] = await tx
-      .select({
-        total: sql<string>`COALESCE(SUM(${schema.tasks.estimatedHours})::numeric, 0)::text`,
-      })
-      .from(schema.tasks)
-      .innerJoin(
-        schema.projects,
-        eq(schema.tasks.projectId, schema.projects.id),
-      )
-      .where(
-        and(
-          eq(schema.tasks.assigneeMemberId, b.memberId),
-          eq(schema.tasks.weekIso, b.weekIso),
-          isNull(schema.projects.archivedAt),
-        ),
-      );
-    const totalStr = agg?.total ?? "0";
+  if (buckets.size === 0) return;
 
-    await tx
-      .insert(schema.workload)
-      .values({
-        memberId: b.memberId,
-        weekIso: b.weekIso,
-        plannedHours: totalStr,
-      })
-      .onConflictDoUpdate({
-        target: [schema.workload.memberId, schema.workload.weekIso],
-        set: {
-          plannedHours: totalStr,
-          updatedAt: sql`now()`,
-        },
-      });
+  const targetKeys = [...buckets.values()];
+  const memberIds = Array.from(new Set(targetKeys.map((b) => b.memberId)));
+  const weekIsos = Array.from(new Set(targetKeys.map((b) => b.weekIso)));
+
+  // 該当 (memberId, weekIso) 組のうち、アクティブプロジェクトのタスク合計を一括集計
+  const aggRows = await tx
+    .select({
+      memberId: schema.tasks.assigneeMemberId,
+      weekIso: schema.tasks.weekIso,
+      total: sql<string>`COALESCE(SUM(${schema.tasks.estimatedHours})::numeric, 0)::text`,
+    })
+    .from(schema.tasks)
+    .innerJoin(
+      schema.projects,
+      eq(schema.tasks.projectId, schema.projects.id),
+    )
+    .where(
+      and(
+        inArray(schema.tasks.assigneeMemberId, memberIds),
+        inArray(schema.tasks.weekIso, weekIsos),
+        isNull(schema.projects.archivedAt),
+      ),
+    )
+    .groupBy(schema.tasks.assigneeMemberId, schema.tasks.weekIso);
+
+  const aggByKey = new Map<string, string>();
+  for (const r of aggRows) {
+    if (r.memberId == null) continue;
+    aggByKey.set(`${r.memberId}::${r.weekIso}`, r.total);
   }
+
+  const valuesToWrite = targetKeys.map((b) => ({
+    memberId: b.memberId,
+    weekIso: b.weekIso,
+    plannedHours: aggByKey.get(`${b.memberId}::${b.weekIso}`) ?? "0",
+  }));
+
+  await tx
+    .insert(schema.workload)
+    .values(valuesToWrite)
+    .onConflictDoUpdate({
+      target: [schema.workload.memberId, schema.workload.weekIso],
+      set: {
+        plannedHours: sql`EXCLUDED.planned_hours`,
+        updatedAt: sql`now()`,
+      },
+    });
+
+  // 参考: or(...) を使うと将来 inArray 組合せ外のバケットも対象にしたくなったとき拡張しやすい。
+  // 現状は inArray × 2 で十分カバーできているので未使用。
+  void or;
 }
 
 export async function collectWorkloadBuckets(
@@ -90,4 +113,3 @@ export async function collectWorkloadBuckets(
   }
   return buckets;
 }
-

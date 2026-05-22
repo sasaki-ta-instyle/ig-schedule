@@ -147,11 +147,19 @@ jobs:
             ln -sfn releases/${SHA} current.new
             mv -T current.new current
             cd current
-            # Always delete-then-start so the PM2 process picks up the new ecosystem
-            # (cwd / script path / env). pm2 reload preserves the original script
-            # absolute path of the first start, which broke after symlink switches.
-            pm2 delete ${CATEGORY}-${APP_NAME} 2>/dev/null || true
-            pm2 start ecosystem.config.cjs --update-env
+            # N-2: 既存プロセスがあれば reload（ダウンタイム無し）、無ければ start。
+            # ecosystem.config.cjs の script は /var/www/.../current/server.js を指していて
+            # 'current' は今アトミック切替済みのため、reload で新リリースが取り込まれる。
+            # 過去 pm2 reload が崩れた事例があったので、reload に失敗したら delete + start に倒す。
+            if pm2 describe ${CATEGORY}-${APP_NAME} >/dev/null 2>&1; then
+              pm2 reload ecosystem.config.cjs --update-env || {
+                echo 'pm2 reload failed; falling back to delete+start'
+                pm2 delete ${CATEGORY}-${APP_NAME} 2>/dev/null || true
+                pm2 start ecosystem.config.cjs --update-env
+              }
+            else
+              pm2 start ecosystem.config.cjs --update-env
+            fi
             pm2 save
           "
 
