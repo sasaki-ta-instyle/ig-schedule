@@ -71,6 +71,13 @@
       "when": 1779431500000,
       "tag": "0009_sasaki_green_brighter",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779432000000,
+      "tag": "0010_sasaki_lead_projects_green",
+      "breakpoints": true
     }
   ]
 }
