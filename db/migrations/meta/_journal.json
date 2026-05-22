@@ -50,6 +50,13 @@
       "when": 1779430000000,
       "tag": "0006_wada_blue",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779430500000,
+      "tag": "0007_yamada_violet",
+      "breakpoints": true
     }
   ]
 }
