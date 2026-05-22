@@ -44,6 +44,9 @@ export function AdminPanel() {
   const [page, setPage] = useState(1);
   const [pageSizeHydrated, setPageSizeHydrated] = useState(false);
 
+  const [keyword, setKeyword] = useState<string>("");
+  const [filterMember, setFilterMember] = useState<number | "all" | "unassigned">("all");
+
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(
     new Set(),
   );
@@ -109,19 +112,39 @@ export function AdminPanel() {
     });
   }
 
-  const projectCount = projects?.length ?? 0;
+  const trimmedKeyword = keyword.trim().toLowerCase();
+  const filteredProjects = useMemo(() => {
+    if (!projects) return [];
+    return projects.filter((p) => {
+      // 担当フィルタ: 未割当 = plannedMemberIds が空、特定メンバー = plannedMemberIds に含まれている
+      if (filterMember === "unassigned") {
+        if (p.plannedMemberIds.length > 0) return false;
+      } else if (filterMember !== "all") {
+        if (!p.plannedMemberIds.includes(filterMember)) return false;
+      }
+      // キーワード: name / summary / notes / company をまとめて検索
+      if (trimmedKeyword) {
+        const hay =
+          `${p.name}\n${p.summary ?? ""}\n${p.notes ?? ""}\n${p.company ?? ""}`.toLowerCase();
+        if (!hay.includes(trimmedKeyword)) return false;
+      }
+      return true;
+    });
+  }, [projects, filterMember, trimmedKeyword]);
+
+  const projectCount = filteredProjects.length;
+  const totalProjectCount = projects?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(projectCount / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
 
   useEffect(() => {
     setPage(1);
-  }, [pageSize]);
+  }, [pageSize, filterMember, trimmedKeyword]);
 
   const pagedProjects = useMemo(() => {
-    if (!projects) return [];
     const start = (safePage - 1) * pageSize;
-    return projects.slice(start, start + pageSize);
-  }, [projects, safePage, pageSize]);
+    return filteredProjects.slice(start, start + pageSize);
+  }, [filteredProjects, safePage, pageSize]);
 
   function toggleSelected(id: number) {
     setSelectedIds((prev) => {
@@ -243,7 +266,36 @@ export function AdminPanel() {
             プロジェクト管理
           </h2>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            className="input"
+            type="search"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="プロジェクトを検索"
+            style={{ width: 200 }}
+            aria-label="プロジェクトを検索（名称・概要・メモ・会社）"
+          />
+          <select
+            className="input"
+            value={String(filterMember)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilterMember(
+                v === "all" || v === "unassigned" ? v : Number(v),
+              );
+            }}
+            style={{ width: 140 }}
+            aria-label="担当でフィルタ"
+          >
+            <option value="all">担当: すべて</option>
+            <option value="unassigned">未割当</option>
+            {members?.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
           <select
             className="input"
             value={String(pageSize)}
@@ -365,6 +417,10 @@ export function AdminPanel() {
           まだプロジェクトがありません。
           {isEdit && "「＋ 新規プロジェクト」から AI でタスク洗い出しまでまとめて作成できます。"}
         </p>
+      ) : filteredProjects.length === 0 ? (
+        <p className="muted t-small">
+          条件に一致するプロジェクトは見つかりませんでした。
+        </p>
       ) : (
         <ul
           style={{
@@ -420,7 +476,11 @@ export function AdminPanel() {
             aria-atomic="true"
             className="muted t-small"
           >
-            {safePage} / {totalPages} ページ（全 {projectCount} 件）
+            {safePage} / {totalPages} ページ（
+            {trimmedKeyword || filterMember !== "all"
+              ? `絞り込み ${projectCount} / 全 ${totalProjectCount} 件`
+              : `全 ${projectCount} 件`}
+            ）
           </div>
           <button
             type="button"
