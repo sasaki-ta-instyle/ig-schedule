@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { ProjectCreateModal } from "./ProjectCreateModal";
@@ -29,7 +29,7 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 const DEFAULT_PAGE_SIZE: PageSize = 10;
 
 export function AdminPanel() {
-  const { isEdit } = useEditMode();
+  const { isEdit, currentMemberId } = useEditMode();
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
   const [showCreate, setShowCreate] = useState(false);
@@ -46,6 +46,16 @@ export function AdminPanel() {
 
   const [keyword, setKeyword] = useState<string>("");
   const [filterMember, setFilterMember] = useState<number | "all" | "unassigned">("all");
+
+  // 初回ハイドレーション: ログイン中メンバーが判明したらフィルタを自分にセットする。
+  // ユーザーが手動で一度でも変更したら以後は自動上書きしない。
+  const filterAutoInitRef = useRef(false);
+  useEffect(() => {
+    if (filterAutoInitRef.current) return;
+    if (currentMemberId == null) return;
+    filterAutoInitRef.current = true;
+    setFilterMember(currentMemberId);
+  }, [currentMemberId]);
 
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(
     new Set(),
@@ -281,6 +291,8 @@ export function AdminPanel() {
             value={String(filterMember)}
             onChange={(e) => {
               const v = e.target.value;
+              // 手動操作以降は自動初期化を抑制
+              filterAutoInitRef.current = true;
               setFilterMember(
                 v === "all" || v === "unassigned" ? v : Number(v),
               );
