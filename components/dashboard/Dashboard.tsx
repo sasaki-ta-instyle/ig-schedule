@@ -72,7 +72,7 @@ type Project = {
 const WEEK_COUNT = 6;
 
 export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
-  const { isEdit: editToggled } = useEditMode();
+  const { isEdit: editToggled, currentMemberId: currentMemberIdInDash } = useEditMode();
   // アーカイブビューでは閲覧専用に固定する
   const isEdit = editToggled && !archived;
   const [anchorWeek, setAnchorWeek] = useState<string>(currentWeekIso());
@@ -608,7 +608,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                         background: "rgba(237, 233, 224, 0.86)",
                         backdropFilter: "saturate(180%) blur(16px)",
                         WebkitBackdropFilter: "saturate(180%) blur(16px)",
-                        minWidth: 200,
+                        minWidth: 160,
                         padding: "6px 8px",
                         textAlign: "left",
                         zIndex: 3,
@@ -695,8 +695,10 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                     return (
                       <td
                         key={w}
-                        className="glass-cell"
-                        style={{ verticalAlign: "top", minWidth: 200 }}
+                        className={`glass-cell${
+                          m.id === currentMemberIdInDash ? " dashboard-row-self" : ""
+                        }`}
+                        style={{ verticalAlign: "top", minWidth: 160 }}
                       >
                         <HoursBadge
                           memberId={m.id}

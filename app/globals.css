@@ -934,7 +934,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 }
 
 /* ── レスポンシブ調整 ── */
-/* ノート 14 インチ以下：ヘッダーの余白を詰めてナビが折り返さないようにする */
+/* iPad Pro 12.9 (1366) の手前から、ヘッダーが横並びで崩れる前にハンバーガー
+   drawer に切り替える。1280px 以下は全部スマホ系 UX として扱う。 */
 @media (max-width: 1280px) {
   .glass-panel {
     padding: var(--space-5);
@@ -942,22 +943,85 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   .modal-content {
     padding: var(--space-5);
   }
-}
 
-/* タブレット縦・小型ノート：ヘッダーが横並びに収まらない場合は折り返す */
-@media (max-width: 900px) {
-  .glass-panel {
-    padding: var(--space-4);
+  /* ── AppShell ヘッダーをハンバーガー drawer に（1280px 以下で発動） ── */
+  .app-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    grid-template-columns: none !important;
+    gap: var(--space-2) !important;
+    padding: var(--space-2) var(--space-4) !important;
+    overflow: hidden;
   }
-  .tabs a {
-    padding: 6px 12px;
-    font-size: .75rem;
+  .app-header > * {
+    justify-self: stretch !important;
+    min-width: 0;
   }
-  .modal-backdrop {
-    padding: var(--space-4);
+  .app-header-top {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-width: 0;
   }
-  .modal-content {
-    padding: var(--space-4);
+  .app-header img[alt="INSTYLE GROUP"] {
+    height: 12px !important;
+  }
+  .app-header .t-h4 {
+    font-size: .8125rem !important;
+    line-height: 1.2;
+  }
+  .hamburger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0 var(--space-2);
+    font-size: 1.125rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .app-header .tabs:not(.is-open),
+  .app-header-right:not(.is-open) {
+    display: none !important;
+  }
+  .app-header .tabs.is-open {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: var(--space-1);
+    background: rgba(243, 241, 238, 0.55);
+    border-radius: var(--r-sm);
+    border: 0;
+    box-shadow: none;
+  }
+  .app-header .tabs.is-open a {
+    text-align: center;
+    padding: var(--space-2) var(--space-3);
+    font-size: .8125rem;
+    border-radius: var(--r-sm);
+    justify-content: center;
+    min-height: 40px;
+  }
+  .app-header-right.is-open {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: var(--space-2);
+    padding: var(--space-1);
+  }
+  .app-header-right.is-open .mode-toggle {
+    align-self: stretch;
+    justify-content: center;
+  }
+  .app-header-right.is-open .badge,
+  .app-header-right.is-open .btn {
+    align-self: stretch;
+    text-align: center;
+    justify-content: center;
   }
 }
 
@@ -984,4 +1048,135 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
     flex-wrap: wrap;
     justify-content: flex-start;
   }
+
+  /* ── 4-1. iOS auto-zoom 防止 + 最小タップ領域 ──
+     iOS Safari/Chrome は input の font-size < 16px だとフォーカス時に
+     強制 zoom が走る。狭幅時のみ 16px に押し上げて UX 破壊を回避。 */
+  .input,
+  select.input,
+  textarea.input {
+    font-size: 16px;
+  }
+  .btn,
+  .btn-sm,
+  .btn-ghost {
+    min-height: 44px;
+  }
+  /* ︙ summary は 24px 矩形でも見つけやすいよう min を 44px に */
+  .action-menu > summary {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Dashboard セル内の ︙ は密度を保つため例外（小さいまま） */
+  .cell-task-list .action-menu > summary {
+    min-height: 28px;
+    min-width: 28px;
+  }
+
+  /* 4-2 (AppShell ハンバーガー drawer) は 900px ブロックに移動済み。
+     640px 以下でさらに padding を詰める微調整だけ残す。 */
+  .app-header {
+    padding: var(--space-2) var(--space-3) !important;
+  }
+  .app-header img[alt="INSTYLE GROUP"] {
+    height: 11px !important;
+  }
+  .app-header .t-h4 {
+    font-size: .75rem !important;
+  }
+
+  /* ── 4-3. SearchFilterBar の収まり ──
+     children として並ぶ <select> や <input> の inline width (180/140/130 等)
+     を上書きし、検索 input は full bleed、子の controls は 2 列で wrap。 */
+  .search-filter-bar {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .search-filter-bar > input[type="search"] {
+    flex: 1 1 100%;
+    width: 100% !important;
+    min-width: 0;
+  }
+  .search-filter-bar > select,
+  .search-filter-bar > .input {
+    flex: 1 1 calc(50% - var(--space-2));
+    width: auto !important;
+    min-width: 0;
+  }
+  .search-filter-bar > label {
+    flex: 1 1 100%;
+  }
+
+  /* ── 4-5. TaskBoard 行を flex-wrap に ──
+     7 列 grid をスマホでは flex-wrap に切り替え、要素が自然に縦積み。
+     drag handle はスマホ DnD が事実上不要なので非表示にする。 */
+  .task-list > li[data-row="taskboard"] {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .task-list > li[data-row="taskboard"] > :first-child {
+    display: none;
+  }
+  .task-list > li[data-row="taskboard"] > :nth-child(3) {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* ── 4-6. Admin ProjectRow / Recurring 行の縦並び ──
+     grid を解いて flex-wrap で縦に積む。chip 群はそのまま wrap。 */
+  .project-row[data-row="admin"] > div:first-child {
+    display: flex !important;
+    flex-wrap: wrap;
+    grid-template-columns: none !important;
+    gap: var(--space-2) !important;
+  }
+  .project-row[data-row="admin"] > div:first-child > * {
+    flex: 0 0 auto;
+  }
+  /* Recurring 行も同様 */
+  [data-row="recurring"] {
+    grid-template-columns: 1fr !important;
+    row-gap: var(--space-2);
+  }
+
+  /* ── 4-7. Modal 内 form / Timeline チップ ── */
+  .modal-content .input,
+  .modal-content textarea,
+  .modal-content select {
+    width: 100%;
+  }
+  .timeline-member-filter {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── 4-4. Dashboard 自分の行ハイライト（全幅で共通） ── */
+.dashboard-row-self {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* ハンバーガー: PC では完全に存在しない。Phase 4 のスマホ用 ── */
+.hamburger {
+  display: none;
+}
+
+/* AppShell のヘッダー内ロゴ / タイトルは PC でも控えめなサイズで。
+   ヘッダーは情報のためのアンカーで、ブランド主張の場ではない。 */
+.app-header img[alt="INSTYLE GROUP"] {
+  height: 12px;
+}
+.app-header .t-h4 {
+  font-size: .9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+/* スマホ用に header の 1 段目をまとめる箱。PC では display: contents で
+   grid 配置に影響させない（中の子要素を直接 grid のセルとして扱う）。 */
+.app-header-top {
+  display: contents;
 }

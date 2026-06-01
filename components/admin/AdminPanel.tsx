@@ -577,7 +577,8 @@ function ProjectRow({
 
   return (
     <li
-      className="glass-card"
+      className="glass-card project-row"
+      data-row="admin"
       style={{
         padding: 14,
         outline: selected ? "2px solid var(--color-info)" : "none",

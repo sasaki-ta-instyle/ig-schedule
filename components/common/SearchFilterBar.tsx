@@ -33,6 +33,7 @@ export function SearchFilterBar<TSize extends number>({
 }) {
   return (
     <div
+      className="search-filter-bar"
       style={{
         display: "flex",
         gap: "var(--space-2)",

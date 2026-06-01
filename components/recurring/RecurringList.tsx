@@ -209,6 +209,7 @@ export function RecurringList() {
             {pagedVisible.map((r) => (
               <li
                 key={r.id}
+                data-row="recurring"
                 style={{
                   display: "grid",
                   gridTemplateColumns: isEdit

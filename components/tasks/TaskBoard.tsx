@@ -1155,7 +1155,7 @@ const SortableTaskRow = memo(function SortableTaskRow({
   );
 
   return (
-    <li ref={setNodeRef} style={style}>
+    <li ref={setNodeRef} style={style} data-row="taskboard">
       <button
         type="button"
         {...attributes}
@@ -1198,7 +1198,7 @@ const DoneTaskRow = memo(function DoneTaskRow({
   onRemove: (t: Task) => void;
 }) {
   return (
-    <li style={doneRowStyle}>
+    <li style={doneRowStyle} data-row="taskboard">
       <span
         aria-hidden="true"
         title="完了タスクは並び替えできません"

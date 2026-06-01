@@ -45,6 +45,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   } = useEditMode();
   const [pwModalOpen, setPwModalOpen] = useState(false);
   const [adminPwModalOpen, setAdminPwModalOpen] = useState(false);
+  // スマホ時のハンバーガー drawer。リンク遷移で自動的に閉じるので state は最小限。
+  const [navOpen, setNavOpen] = useState(false);
 
   const { data: members } = useSWR<Member[]>(
     isEdit ? "/api/members" : null,
@@ -57,6 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className={`page-wrap ${isReadonly ? "is-readonly" : ""}`}>
       <header
+        className="app-header"
         style={{
           position: "sticky",
           top: 0,
@@ -72,29 +75,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           borderBottom: "1px solid rgba(255, 255, 255, 0.42)",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            gap: "var(--space-1)",
-            justifySelf: "start",
-          }}
-        >
-          <img
-            src="https://app.instyle.group/_shared/static/logo.svg"
-            alt="INSTYLE GROUP"
-            style={{ height: 14, width: "auto", display: "block", opacity: 0.85 }}
-          />
-          <strong
-            className="t-h4"
-            style={{ fontWeight: 600, letterSpacing: "-0.01em" }}
+        {/* スマホでは「ロゴ + ハンバーガー」が 1 段目で並ぶ。
+            display: contents なので PC の grid 配置には影響しない。 */}
+        <div className="app-header-top">
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: "var(--space-1)",
+              justifySelf: "start",
+            }}
           >
-            プロジェクト週次ダッシュボード
-          </strong>
+            <img
+              src="https://app.instyle.group/_shared/static/logo.svg"
+              alt="INSTYLE GROUP"
+              style={{ height: 12, width: "auto", display: "block", opacity: 0.85 }}
+            />
+            <strong
+              className="t-h4"
+              style={{ fontWeight: 600, letterSpacing: "-0.01em" }}
+            >
+              プロジェクト週次ダッシュボード
+            </strong>
+          </div>
+
+          <button
+            type="button"
+            className="hamburger btn btn-ghost"
+            aria-expanded={navOpen}
+            aria-label={navOpen ? "メニューを閉じる" : "メニューを開く"}
+            onClick={() => setNavOpen((o) => !o)}
+          >
+            <span aria-hidden="true">{navOpen ? "✕" : "☰"}</span>
+          </button>
         </div>
 
-        <nav className="tabs" style={{ justifySelf: "center" }}>
+        <nav
+          className={`tabs ${navOpen ? "is-open" : ""}`}
+          onClick={() => setNavOpen(false)}
+          style={{ justifySelf: "center" }}
+        >
           {NAV.filter((item) => !item.editOnly || isEdit).map((item) => {
             const active =
               item.href === "/"
@@ -113,6 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div
+          className={`app-header-right ${navOpen ? "is-open" : ""}`}
           style={{
             display: "inline-flex",
             alignItems: "center",
