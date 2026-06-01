@@ -692,13 +692,21 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
+  padding: 0 var(--space-2);
   overflow: hidden;
   font-size: .6875rem;
   font-weight: 600;
   letter-spacing: .04em;
   color: var(--color-text-inv);
-  transition: opacity var(--ease-out), box-shadow var(--ease-out);
+  box-shadow: var(--glass-hl), 0 1px 3px rgba(53, 54, 45, 0.12);
+  transition: transform var(--ease-out), box-shadow var(--ease-out), opacity var(--ease-out);
+}
+.timeline-row:hover .timeline-row-bar {
+  box-shadow: var(--glass-hl), 0 4px 12px rgba(53, 54, 45, 0.16);
+  transform: translateY(-1px);
+}
+.timeline-row.active .timeline-row-bar {
+  box-shadow: var(--glass-hl), 0 4px 14px rgba(53, 54, 45, 0.18);
 }
 .timeline-row-bar > span {
   display: -webkit-box;
@@ -730,10 +738,12 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(196,193,176,.32);
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  /* 罫線で区切らず、背景の段差で「フィルタ領域」を表現 */
+  background: rgba(243, 241, 238, 0.32);
+  border-radius: var(--r-sm);
 }
 .timeline-chip {
   display: inline-flex;
@@ -741,8 +751,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   gap: 6px;
   padding: 4px 12px;
   border-radius: var(--r-pill);
-  background: rgba(243,241,238,.55);
-  border: 1px solid rgba(255,255,255,.62);
+  background: var(--glass-warm);
+  border: 1px solid var(--glass-border-w);
   font-size: .75rem;
   font-weight: 500;
   font-family: var(--font-sans);
@@ -751,12 +761,27 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   transition: all var(--ease-out);
   box-shadow: var(--glass-hl);
 }
-.timeline-chip:hover { background: rgba(255,255,255,.72); color: var(--color-text); }
+.timeline-chip:hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-text);
+}
+/* active は Nav active タブ / 「今週」マーカーと同じ「明るい白 pill + 青ドット +
+   太字」で統一。dark 反転はトーンが浮くため使わない。 */
 .timeline-chip.is-active {
-  background: rgba(32,33,26,.85);
-  border-color: rgba(32,33,26,.85);
-  color: var(--color-text-inv);
-  box-shadow: var(--glass-hl-d), 0 2px 8px rgba(53,54,45,.18);
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.88);
+  color: var(--color-text);
+  font-weight: 700;
+  box-shadow: var(--glass-hl), 0 1px 4px rgba(53, 54, 45, 0.10);
+}
+.timeline-chip.is-active::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-info);
+  flex-shrink: 0;
 }
 .timeline-chip-dot {
   width: 8px;

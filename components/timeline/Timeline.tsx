@@ -232,10 +232,6 @@ export function Timeline() {
                 className={`timeline-chip ${active ? "is-active" : ""}`}
                 aria-pressed={active}
                 onClick={() => setMemberFilter(active ? null : m.id)}
-                style={{
-                  background: active ? hexToRgba(m.color, 0.85) : undefined,
-                  borderColor: active ? hexToRgba(m.color, 0.85) : undefined,
-                }}
               >
                 <span
                   className="timeline-chip-dot"
