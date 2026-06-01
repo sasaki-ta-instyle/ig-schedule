@@ -28,9 +28,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type Member = { id: number; name: string; color: string };
+// ProjectAddTasksModal も同じ DraftTask / SortableDraftRow を使うため export する。
+export type Member = { id: number; name: string; color: string };
 
-type DraftTask = {
+export type DraftTask = {
   title: string;
   weekIso: string;
   assigneeMemberId: number | null;
@@ -38,15 +39,16 @@ type DraftTask = {
   estimatedHours: number | null;
 };
 
-type DraftRow = DraftTask & { _localId: string };
+export type DraftRow = DraftTask & { _localId: string };
 
-const ROW_GRID = "24px 1fr 120px 120px 70px 24px";
+export const DRAFT_ROW_GRID = "24px 1fr 120px 120px 70px 24px";
+const ROW_GRID = DRAFT_ROW_GRID;
 
-function withLocalId(t: DraftTask): DraftRow {
+export function withLocalId(t: DraftTask): DraftRow {
   return { ...t, _localId: crypto.randomUUID() };
 }
 
-function stripLocalId({ _localId: _omit, ...rest }: DraftRow): DraftTask {
+export function stripLocalId({ _localId: _omit, ...rest }: DraftRow): DraftTask {
   return rest;
 }
 
@@ -640,7 +642,7 @@ export function ProjectCreateModal({
   );
 }
 
-function SortableDraftRow({
+export function SortableDraftRow({
   id,
   draft,
   index,

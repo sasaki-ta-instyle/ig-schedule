@@ -1,5 +1,5 @@
 import { db, schema } from "@/db/client";
-import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
   clampHours,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/validate";
 import { isKnownCompany } from "@/lib/companies";
 import { getViewerMemberId, visibilityCondition } from "@/lib/visibility";
+import { applyWorkloadIncrements } from "@/lib/workload-apply";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -175,40 +176,7 @@ export async function POST(req: Request) {
         })),
       );
 
-      const buckets = new Map<
-        string,
-        { memberId: number; weekIso: string; hours: number }
-      >();
-      for (const t of cleanTasks) {
-        if (!t.assigneeMemberId || t.estimatedHours == null) continue;
-        if (t.estimatedHours <= 0) continue;
-        const key = `${t.assigneeMemberId}::${t.weekIso}`;
-        const cur = buckets.get(key);
-        if (cur) cur.hours += t.estimatedHours;
-        else
-          buckets.set(key, {
-            memberId: t.assigneeMemberId,
-            weekIso: t.weekIso,
-            hours: t.estimatedHours,
-          });
-      }
-
-      for (const b of buckets.values()) {
-        await tx
-          .insert(schema.workload)
-          .values({
-            memberId: b.memberId,
-            weekIso: b.weekIso,
-            plannedHours: b.hours.toString(),
-          })
-          .onConflictDoUpdate({
-            target: [schema.workload.memberId, schema.workload.weekIso],
-            set: {
-              plannedHours: sql`${schema.workload.plannedHours} + ${b.hours}`,
-              updatedAt: sql`now()`,
-            },
-          });
-      }
+      await applyWorkloadIncrements(tx, cleanTasks);
     }
 
     return projectRow;

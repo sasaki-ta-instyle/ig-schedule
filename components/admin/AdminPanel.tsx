@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { ProjectCreateModal } from "./ProjectCreateModal";
+import { ProjectAddTasksModal } from "./ProjectAddTasksModal";
 import { COMPANIES, type Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
 import { LinkifiedText } from "@/components/LinkifiedText";
@@ -33,6 +34,7 @@ export function AdminPanel() {
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
   const [showCreate, setShowCreate] = useState(false);
+  const [addTasksProjectId, setAddTasksProjectId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // 編集モードを抜けたら選択をクリア
@@ -457,6 +459,7 @@ export function AdminPanel() {
               onToggleMember={(id) => togglePlannedMember(p, id)}
               onArchive={() => archiveProject(p)}
               onDelete={() => deleteProject(p)}
+              onAddTasks={() => setAddTasksProjectId(p.id)}
             />
           ))}
         </ul>
@@ -521,6 +524,34 @@ export function AdminPanel() {
           }}
         />
       )}
+
+      {addTasksProjectId != null && (() => {
+        const target = (projects ?? []).find((p) => p.id === addTasksProjectId);
+        if (!target) return null;
+        return (
+          <ProjectAddTasksModal
+            project={{
+              id: target.id,
+              name: target.name,
+              summary: target.summary,
+              plannedMemberIds: target.plannedMemberIds,
+              dueDate: target.dueDate,
+              company: target.company,
+            }}
+            members={members ?? []}
+            onClose={() => setAddTasksProjectId(null)}
+            onAdded={() => {
+              setAddTasksProjectId(null);
+              mutate(
+                (key) =>
+                  typeof key === "string" &&
+                  (key.startsWith("/api/tasks") ||
+                    key.startsWith("/api/workload")),
+              );
+            }}
+          />
+        );
+      })()}
     </section>
   );
 }
@@ -537,6 +568,7 @@ function ProjectRow({
   onToggleMember,
   onArchive,
   onDelete,
+  onAddTasks,
 }: {
   project: Project;
   members: Member[];
@@ -549,6 +581,7 @@ function ProjectRow({
   onToggleMember: (memberId: number) => void | Promise<void>;
   onArchive: () => void | Promise<void>;
   onDelete: () => void | Promise<void>;
+  onAddTasks: () => void;
 }) {
   const memberById: Record<number, Member> = {};
   for (const m of members) memberById[m.id] = m;
@@ -566,7 +599,7 @@ function ProjectRow({
         style={{
           display: "grid",
           gridTemplateColumns: isEdit
-            ? "auto auto 1fr 120px 140px auto auto auto"
+            ? "auto auto 1fr 120px 140px auto auto auto auto"
             : "auto 1fr auto 140px auto",
           gap: 10,
           alignItems: "center",
@@ -655,6 +688,15 @@ function ProjectRow({
 
         {isEdit && (
           <>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm edit-only"
+              onClick={onAddTasks}
+              title="AI でたたき台を生成、または手動でこのプロジェクトにタスクを追加"
+              style={{ fontSize: ".75rem" }}
+            >
+              ＋ タスク追加
+            </button>
             <button
               type="button"
               className="btn btn-ghost btn-sm edit-only"
