@@ -508,23 +508,25 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   border-left: 1px solid rgba(196,193,176,.40);
   padding: 2px 0;
 }
-/* 「今週」列のマーカー。一目で現在週を識別できるように、
-   上端に 4px のアクセント帯 + 半透明の glass tint を載せる。
-   将来的に列全体への縦ストライプ拡張は Phase 3 で検討。 */
+/* 「今週」列のマーカー。ヘッダーナビの active タブと同じ意匠（明るい白の pill +
+   青ドット + 太字）に揃え、画面全体のトーンを統一する。 */
 .timeline-axis-months > div.is-today {
-  position: relative;
+  background: rgba(255, 255, 255, 0.92);
   color: var(--color-text);
   font-weight: 700;
-  background: rgba(56, 83, 123, 0.12);
-  border-left-color: rgba(56, 83, 123, 0.55);
+  border-left-color: transparent;
+  border-radius: var(--r-sm);
+  box-shadow: var(--glass-hl), 0 1px 4px rgba(53, 54, 45, 0.10);
 }
 .timeline-axis-months > div.is-today::before {
   content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  background: var(--color-info, #38537B);
-  border-radius: 2px 2px 0 0;
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-info);
+  margin-right: 5px;
+  vertical-align: middle;
 }
 
 .timeline-milestones {
