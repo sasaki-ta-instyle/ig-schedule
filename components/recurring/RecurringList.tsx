@@ -2,6 +2,7 @@
 
 import useSWR, { mutate } from "swr";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { SearchFilterBar } from "@/components/common/SearchFilterBar";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 
@@ -137,23 +138,15 @@ export function RecurringList() {
             定例タスク
           </h2>
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
+        <SearchFilterBar
+          searchValue={keyword}
+          onSearchChange={setKeyword}
+          searchPlaceholder="定例タスクを検索"
+          searchAriaLabel="定例タスクを検索"
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
         >
-          <input
-            className="input"
-            type="search"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="定例タスクを検索"
-            style={{ width: 200 }}
-            aria-label="定例タスクを検索"
-          />
           <select
             className="input"
             value={String(filterMember)}
@@ -164,6 +157,7 @@ export function RecurringList() {
               );
             }}
             style={{ width: 140 }}
+            aria-label="担当でフィルタ"
           >
             <option value="all">担当: すべて</option>
             <option value="unassigned">未割当</option>
@@ -184,20 +178,7 @@ export function RecurringList() {
             />
             アーカイブ済みも表示
           </label>
-          <select
-            className="input"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
-            style={{ width: 130 }}
-            aria-label="1ページあたりの件数"
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} 件 / ページ
-              </option>
-            ))}
-          </select>
-        </div>
+        </SearchFilterBar>
       </header>
 
       <div className="glass-card" style={{ padding: 16 }}>

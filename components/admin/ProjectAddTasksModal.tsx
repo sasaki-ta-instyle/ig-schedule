@@ -237,26 +237,12 @@ export function ProjectAddTasksModal({
     <div
       role="dialog"
       aria-modal="true"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(53,54,45,.38)",
-        backdropFilter: "blur(4px)",
-        zIndex: 10,
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: 32,
-        overflowY: "auto",
-      }}
+      className="modal-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        className="glass-panel"
-        style={{ width: "min(960px, 100%)", padding: 28 }}
-      >
+      <div className="glass-panel modal-content">
         <header
           style={{
             display: "flex",

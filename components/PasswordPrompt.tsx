@@ -52,28 +52,19 @@ export function PasswordPrompt({
     <div
       role="dialog"
       aria-modal="true"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(53,54,45,.38)",
-        backdropFilter: "blur(4px)",
-        zIndex: 20,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-      }}
+      className="modal-backdrop"
+      // PasswordPrompt は他の Modal より上に立たせ、縦中央寄せ
+      style={{ zIndex: 20, alignItems: "center" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
       <form
-        className="glass-panel"
+        className="glass-panel modal-content modal-content--sm"
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit && memberId != null) onSubmit(memberId, pw);
         }}
-        style={{ width: "min(420px, 100%)", padding: 24 }}
       >
         <span className="eyebrow">EDIT MODE</span>
         <h3 className="t-h4" style={{ marginTop: 4, marginBottom: 10 }}>

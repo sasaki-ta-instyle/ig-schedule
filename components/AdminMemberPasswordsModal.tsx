@@ -93,24 +93,15 @@ export function AdminMemberPasswordsModal({
     <div
       role="dialog"
       aria-modal="true"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(53,54,45,.38)",
-        backdropFilter: "blur(4px)",
-        zIndex: 22,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-      }}
+      className="modal-backdrop"
+      style={{ zIndex: 22, alignItems: "center" }}
       onClick={(e) => {
         if (e.target === e.currentTarget && !pending) onClose();
       }}
     >
       <div
-        className="glass-panel"
-        style={{ width: "min(520px, 100%)", padding: 24, maxHeight: "90vh", overflow: "auto" }}
+        className="glass-panel modal-content modal-content--md"
+        style={{ maxHeight: "90vh", overflow: "auto" }}
       >
         <span className="eyebrow">ADMIN</span>
         <h3 className="t-h4" style={{ marginTop: 4, marginBottom: 6 }}>

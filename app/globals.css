@@ -145,6 +145,54 @@ main, header, footer, section, .page-wrap { position: relative; z-index: 1; }
   position: relative;
 }
 
+/* ── Modal (共通の枠) ──
+   5 つの Modal が独自に backdrop + glass-panel を inline で書いていた状態を共通化。
+   .modal-backdrop は全画面のオーバーレイ、.modal-content は内側のカード。
+   scene-bg は blur を持たないので、ここで backdrop に軽い blur(8px) を当てる程度に留めて
+   内側 .glass-panel の blur(24px) と二重に重ねすぎないようにする。 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-8);
+  overflow-y: auto;
+  background: rgba(32, 33, 26, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-content {
+  width: min(960px, 100%);
+  padding: 28px;
+}
+
+.modal-content--sm {
+  width: min(420px, 100%);
+}
+.modal-content--md {
+  width: min(640px, 100%);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+  gap: var(--space-4);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.45);
+}
+
 .glass-cell {
   background: rgba(243,241,238,.35);
   border: 1px solid rgba(255,255,255,.42);
@@ -227,11 +275,39 @@ main, header, footer, section, .page-wrap { position: relative; z-index: 1; }
   transition: all 150ms ease;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 2px 8px rgba(53,54,45,.06);
 }
-.input:focus {
+.input:focus-visible {
   outline: none;
   background: rgba(255,255,255,.82);
   border-color: rgba(255,255,255,.95);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 3px rgba(196,193,176,.38);
+}
+
+/* ── Focus visible（共通） ──
+   キーボード操作で interactive 要素に focus が当たったとき、
+   Liquid 規約のリング `0 0 0 3px rgba(196,193,176,.38)` を一律に。
+   click / tap では発火させない（:focus でなく :focus-visible を使う）。 */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="checkbox"]:focus-visible,
+[role="radio"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  /* リングだけ当てて border-radius は触らない。
+     pill 形状の btn-primary や mode-toggle が四角に変形しないように。 */
+  box-shadow: 0 0 0 3px rgba(196, 193, 176, 0.38);
+}
+
+.checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(196, 193, 176, 0.55);
+}
+
+/* ── Spinner animation (共通) ── */
+@keyframes ig-spinner {
+  to { transform: rotate(360deg); }
 }
 .input::placeholder { color: var(--color-text-light); }
 select.input { cursor: pointer; }
@@ -284,10 +360,30 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   text-decoration: none;
   transition: all var(--ease-out);
 }
+/* リンクを inline-flex に変えて、accent dot を first-child として配置することで
+   ラベルが 2 行に wrap してもドットが見出しの先頭から離れないようにする。 */
+.tabs a {
+  display: inline-flex;
+  align-items: center;
+}
 .tabs a[aria-current="page"] {
-  background: rgba(255,255,255,.78);
+  background: rgba(255,255,255,.92);
   color: var(--color-text);
-  box-shadow: var(--glass-hl), 0 1px 4px rgba(53,54,45,.08);
+  font-weight: 700;
+  box-shadow: var(--glass-hl), 0 1px 4px rgba(53,54,45,.10);
+}
+.tabs a[aria-current="page"]::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-info);
+  margin-right: 7px;
+  flex-shrink: 0;
+}
+.tabs a:hover:not([aria-current="page"]) {
+  color: var(--color-text);
+  background: rgba(255,255,255,.42);
 }
 
 /* ── Badge / chip ── */

@@ -64,8 +64,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           display: "grid",
           gridTemplateColumns: "1fr auto 1fr",
           alignItems: "center",
-          gap: 20,
-          padding: "16px 32px",
+          gap: "var(--space-5)",
+          padding: "var(--space-4) var(--space-8)",
           background: "rgba(237, 233, 224, 0.72)",
           backdropFilter: "saturate(180%) blur(16px)",
           WebkitBackdropFilter: "saturate(180%) blur(16px)",
@@ -77,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             display: "flex",
             flexDirection: "column",
             alignItems: "flex-start",
-            gap: 6,
+            gap: "var(--space-1)",
             justifySelf: "start",
           }}
         >
@@ -116,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: 10,
+            gap: "var(--space-3)",
             justifySelf: "end",
           }}
         >
@@ -186,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main style={{ padding: "8px 32px 60px" }}>{children}</main>
+      <main style={{ padding: "var(--space-2) var(--space-8) 60px" }}>{children}</main>
 
       <PasswordPrompt
         open={promptOpen}

@@ -38,6 +38,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { EmptyState } from "@/components/common/EmptyState";
+import { SearchFilterBar } from "@/components/common/SearchFilterBar";
 
 const ROW_GRID_TASKBOARD = "20px auto 1fr 110px 110px 64px auto";
 
@@ -611,16 +613,15 @@ export function TaskBoard() {
           </h2>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input
-            className="input"
-            type="search"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="タスク・メモ・プロジェクト名を検索"
-            style={{ width: 240 }}
-            aria-label="タスクを検索"
-          />
+        <SearchFilterBar
+          searchValue={keyword}
+          onSearchChange={setKeyword}
+          searchPlaceholder="タスク・メモ・プロジェクト名を検索"
+          searchAriaLabel="タスクを検索"
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        >
           <select
             className="input"
             value={String(filterProject)}
@@ -628,6 +629,7 @@ export function TaskBoard() {
               setFilterProject(e.target.value === "all" ? "all" : Number(e.target.value))
             }
             style={{ width: 180 }}
+            aria-label="プロジェクトで絞り込み"
           >
             <option value="all">プロジェクト: すべて</option>
             {projects?.map((p) => (
@@ -646,6 +648,7 @@ export function TaskBoard() {
               else setFilterMember(Number(v));
             }}
             style={{ width: 140 }}
+            aria-label="担当で絞り込み"
           >
             <option value="all">担当: すべて</option>
             {members?.map((m) => (
@@ -660,39 +663,31 @@ export function TaskBoard() {
             value={filterDone}
             onChange={(e) => setFilterDone(e.target.value as "all" | "open" | "done")}
             style={{ width: 130 }}
+            aria-label="状態で絞り込み"
           >
             <option value="all">状態: すべて</option>
             <option value="open">未完了のみ</option>
             <option value="done">完了のみ</option>
           </select>
-          <select
-            className="input"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
-            style={{ width: 130 }}
-            aria-label="1ページあたりのプロジェクト件数"
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} 件 / ページ
-              </option>
-            ))}
-          </select>
-        </div>
+        </SearchFilterBar>
       </header>
 
       {!projects ? (
         <p className="muted">読み込み中…</p>
       ) : projects.length === 0 ? (
-        <p className="muted">
-          プロジェクトがありません。「プロジェクト管理」ページから追加してください。
-        </p>
+        <EmptyState
+          title="プロジェクトがありません"
+          hint="「プロジェクト管理」ページから追加してください"
+        />
       ) : hideEmptyProjects && filtered.length === 0 ? (
-        <p className="muted">
-          {trimmedKeyword
-            ? `「${keyword.trim()}」に一致するタスクは見つかりませんでした。`
-            : "条件に一致するタスクはありません。"}
-        </p>
+        <EmptyState
+          title={
+            trimmedKeyword
+              ? `「${keyword.trim()}」に一致するタスクは見つかりませんでした`
+              : "条件に一致するタスクはありません"
+          }
+          hint="フィルタを「すべて」に戻すと全件表示されます"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {pagedProjects.map((p) => {

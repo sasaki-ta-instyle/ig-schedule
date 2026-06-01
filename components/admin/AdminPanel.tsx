@@ -6,6 +6,7 @@ import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 import { ProjectCreateModal } from "./ProjectCreateModal";
 import { ProjectAddTasksModal } from "./ProjectAddTasksModal";
+import { SearchFilterBar } from "@/components/common/SearchFilterBar";
 import { COMPANIES, type Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
 import { LinkifiedText } from "@/components/LinkifiedText";
@@ -278,16 +279,15 @@ export function AdminPanel() {
             プロジェクト管理
           </h2>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <input
-            className="input"
-            type="search"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="プロジェクトを検索"
-            style={{ width: 200 }}
-            aria-label="プロジェクトを検索（名称・概要・メモ・会社）"
-          />
+        <SearchFilterBar
+          searchValue={keyword}
+          onSearchChange={setKeyword}
+          searchPlaceholder="プロジェクトを検索"
+          searchAriaLabel="プロジェクトを検索（名称・概要・メモ・会社）"
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+        >
           <select
             className="input"
             value={String(filterMember)}
@@ -307,19 +307,6 @@ export function AdminPanel() {
             {members?.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="input"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
-            style={{ width: 130 }}
-            aria-label="1ページあたりの件数"
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} 件 / ページ
               </option>
             ))}
           </select>
@@ -361,7 +348,7 @@ export function AdminPanel() {
               </button>
             </>
           )}
-        </div>
+        </SearchFilterBar>
       </header>
 
       {isEdit && (projects?.length ?? 0) > 0 && (

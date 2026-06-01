@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 
 export function PasswordChangeModal({
   open,
@@ -50,28 +51,18 @@ export function PasswordChangeModal({
     <div
       role="dialog"
       aria-modal="true"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(53,54,45,.38)",
-        backdropFilter: "blur(4px)",
-        zIndex: 21,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-      }}
+      className="modal-backdrop"
+      style={{ zIndex: 21, alignItems: "center" }}
       onClick={(e) => {
         if (e.target === e.currentTarget && !pending) onClose();
       }}
     >
       <form
-        className="glass-panel"
+        className="glass-panel modal-content modal-content--sm"
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit) handle();
         }}
-        style={{ width: "min(420px, 100%)", padding: 24 }}
       >
         <span className="eyebrow">PASSWORD</span>
         <h3 className="t-h4" style={{ marginTop: 4, marginBottom: 10 }}>
@@ -144,7 +135,11 @@ export function PasswordChangeModal({
             className="btn btn-primary"
             disabled={!canSubmit}
           >
-            {pending ? "更新中…" : "変更"}
+            {pending ? (
+              <LoadingSpinner inline size={14} label="更新中" />
+            ) : (
+              "変更"
+            )}
           </button>
         </div>
       </form>
