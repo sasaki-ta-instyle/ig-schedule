@@ -242,7 +242,7 @@ export function ProjectAddTasksModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="glass-panel modal-content">
+      <div className="glass-panel modal-content modal-content--scroll">
         <header
           style={{
             display: "flex",

@@ -976,8 +976,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
-    min-width: 40px;
-    min-height: 40px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0 var(--space-2);
     font-size: 1.125rem;
     line-height: 1;
@@ -1004,7 +1004,7 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
     font-size: .8125rem;
     border-radius: var(--r-sm);
     justify-content: center;
-    min-height: 40px;
+    min-height: 44px;
   }
   .app-header-right.is-open {
     display: flex !important;
@@ -1051,11 +1051,18 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 
   /* ── 4-1. iOS auto-zoom 防止 + 最小タップ領域 ──
      iOS Safari/Chrome は input の font-size < 16px だとフォーカス時に
-     強制 zoom が走る。狭幅時のみ 16px に押し上げて UX 破壊を回避。 */
+     強制 zoom が走る。狭幅時のみ 16px に押し上げて UX 破壊を回避。
+     TaskBoard / RecurringList の inline fontSize（.75rem 等）を上書きする
+     必要があるため !important で確実に効かせる。 */
   .input,
   select.input,
-  textarea.input {
-    font-size: 16px;
+  textarea.input,
+  input[type="text"],
+  input[type="search"],
+  input[type="number"],
+  input[type="password"],
+  input[type="date"] {
+    font-size: 16px !important;
   }
   .btn,
   .btn-sm,
