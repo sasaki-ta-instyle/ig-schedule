@@ -309,6 +309,11 @@ summary:focus-visible,
 @keyframes ig-spinner {
   to { transform: rotate(360deg); }
 }
+
+/* TaskBoard / Admin で共通の「タップ可能な見出し行」hover */
+.project-header-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.42);
+}
 .input::placeholder { color: var(--color-text-light); }
 select.input { cursor: pointer; }
 textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }

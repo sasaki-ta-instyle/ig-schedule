@@ -68,7 +68,8 @@ const dragHandleStyleDragging: CSSProperties = {
 
 const doneRowStyle: CSSProperties = {
   ...baseRowStyle,
-  opacity: 0.55,
+  background: "var(--glass-tinted)",
+  opacity: 0.6,
 };
 
 const doneRowHandleStyle: CSSProperties = {
@@ -182,6 +183,20 @@ export function TaskBoard() {
 
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [expandedHydrated, setExpandedHydrated] = useState(false);
+
+  // 完了済みセクションの開閉。プロジェクト本体の expanded と別管理にし、
+  // default で「閉じる」（完了タスクは下に沈ませる方針）。state はメモリのみ。
+  const [completedExpanded, setCompletedExpanded] = useState<Set<number>>(
+    new Set(),
+  );
+  const toggleCompletedExpanded = useCallback((projectId: number) => {
+    setCompletedExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     try {
@@ -708,8 +723,14 @@ export function TaskBoard() {
                 ? false
                 : !expanded.has(p.id);
               const panelId = `project-panel-${p.id}`;
+              const doneCount = list.filter((t) => t.done).length;
+              const isCompletedExpanded = completedExpanded.has(p.id);
               return (
-                <div key={p.id} className="glass-card" style={{ padding: 16 }}>
+                <div
+                  key={p.id}
+                  className="glass-card"
+                  style={{ padding: "var(--space-2) var(--space-4) var(--space-4)" }}
+                >
                   <button
                     type="button"
                     onClick={() => toggleExpanded(p.id)}
@@ -722,34 +743,41 @@ export function TaskBoard() {
                         ? "絞り込み中はすべて展開されます"
                         : undefined
                     }
+                    className="project-header-btn"
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 8,
-                      marginBottom: isCollapsed ? 0 : 10,
+                      gap: "var(--space-2)",
+                      marginBottom: isCollapsed ? 0 : "var(--space-2)",
                       width: "100%",
-                      padding: 0,
+                      minHeight: 44,
+                      padding: "var(--space-2) var(--space-3)",
                       border: 0,
+                      borderRadius: "var(--r-sm)",
                       background: "transparent",
                       color: "inherit",
                       textAlign: "left",
                       cursor: hideEmptyProjects ? "default" : "pointer",
                       font: "inherit",
-                      opacity: 1,
+                      transition: "background var(--ease-out)",
                     }}
                   >
                     <span
                       aria-hidden="true"
                       style={{
                         display: "inline-flex",
-                        width: 14,
+                        width: 24,
+                        height: 24,
+                        alignItems: "center",
                         justifyContent: "center",
-                        color: "var(--color-text-light)",
-                        fontSize: ".75rem",
+                        color: "var(--color-text-muted)",
+                        fontSize: "1.125rem",
+                        lineHeight: 1,
                         transform: isCollapsed
                           ? "rotate(-90deg)"
                           : "rotate(0deg)",
-                        transition: "transform .15s ease",
+                        transition: "transform var(--ease-out)",
+                        flexShrink: 0,
                       }}
                     >
                       ▾
@@ -760,6 +788,7 @@ export function TaskBoard() {
                         height: 10,
                         borderRadius: 999,
                         background: p.color,
+                        flexShrink: 0,
                       }}
                     />
                     <strong className="t-h4" style={{ fontSize: "1rem" }}>
@@ -767,7 +796,7 @@ export function TaskBoard() {
                     </strong>
                     {p.company && <CompanyChip company={p.company} size="sm" />}
                     <span className="muted t-small">
-                      ({list.filter((t) => t.done).length}/{list.length})
+                      ({doneCount}/{list.length})
                     </span>
                   </button>
                   <div id={panelId} hidden={isCollapsed}>
@@ -836,35 +865,70 @@ export function TaskBoard() {
                         </div>
                       ))}
                       {completedTasks.length > 0 && (
-                        <div style={{ marginTop: 4 }}>
-                          <div
+                        <div style={{ marginTop: "var(--space-2)" }}>
+                          {/* 完了済みは default で折り畳み。見出し全体クリックで開閉 */}
+                          <button
+                            type="button"
+                            onClick={() => toggleCompletedExpanded(p.id)}
+                            aria-expanded={isCompletedExpanded}
+                            className="project-header-btn"
                             style={{
-                              fontSize: ".6875rem",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "var(--space-2)",
+                              width: "100%",
+                              padding: "var(--space-1) var(--space-2)",
+                              border: 0,
+                              borderRadius: "var(--r-sm)",
+                              background: "transparent",
                               color: "var(--color-text-light)",
+                              textAlign: "left",
+                              cursor: "pointer",
+                              font: "inherit",
+                              fontSize: ".6875rem",
                               letterSpacing: ".06em",
                               textTransform: "uppercase",
-                              padding: "2px 8px 4px",
                             }}
                           >
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                display: "inline-flex",
+                                width: 16,
+                                height: 16,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: ".875rem",
+                                lineHeight: 1,
+                                transform: isCompletedExpanded
+                                  ? "rotate(0deg)"
+                                  : "rotate(-90deg)",
+                                transition: "transform var(--ease-out)",
+                              }}
+                            >
+                              ▾
+                            </span>
                             完了済み（{completedTasks.length}）
-                          </div>
-                          <ul
-                            className="task-list"
-                            style={taskListStyle}
-                          >
-                            {completedTasks.map((t) => (
-                              <DoneTaskRow
-                                key={t.id}
-                                task={t}
-                                isEdit={isEdit}
-                                members={members ?? []}
-                                weeks={weeks}
-                                onToggleDone={toggleDone}
-                                onUpdate={updateField}
-                                onRemove={remove}
-                              />
-                            ))}
-                          </ul>
+                          </button>
+                          {isCompletedExpanded && (
+                            <ul
+                              className="task-list completed-list"
+                              style={taskListStyle}
+                            >
+                              {completedTasks.map((t) => (
+                                <DoneTaskRow
+                                  key={t.id}
+                                  task={t}
+                                  isEdit={isEdit}
+                                  members={members ?? []}
+                                  weeks={weeks}
+                                  onToggleDone={toggleDone}
+                                  onUpdate={updateField}
+                                  onRemove={remove}
+                                />
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       )}
                     </div>
