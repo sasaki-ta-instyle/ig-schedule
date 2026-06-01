@@ -435,14 +435,19 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   box-shadow: 0 2px 6px rgba(53,54,45,.18);
 }
 
-/* ── Nav tabs ── */
+/* ── Nav tabs (Floating Pill) ──
+   design.md 準拠の Floating Pill。glass material + backdrop blur + 浮遊感のある
+   shadow で「ヘッダー領域に浮かんでいる pill」として独立した存在感を持たせる。 */
 .tabs {
   display: inline-flex;
   gap: 4px;
-  background: rgba(243,241,238,.45);
+  background: var(--glass-warm);
+  backdrop-filter: var(--glass-blur-sm);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
   padding: 4px;
   border-radius: var(--r-pill);
-  border: 1px solid rgba(255,255,255,.55);
+  border: 1px solid var(--glass-border-w);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
 }
 .tabs a {
   padding: 7px 18px;
@@ -926,4 +931,57 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
     width: 100%;
   }
   .timeline-detail { margin-left: 0; }
+}
+
+/* ── レスポンシブ調整 ── */
+/* ノート 14 インチ以下：ヘッダーの余白を詰めてナビが折り返さないようにする */
+@media (max-width: 1280px) {
+  .glass-panel {
+    padding: var(--space-5);
+  }
+  .modal-content {
+    padding: var(--space-5);
+  }
+}
+
+/* タブレット縦・小型ノート：ヘッダーが横並びに収まらない場合は折り返す */
+@media (max-width: 900px) {
+  .glass-panel {
+    padding: var(--space-4);
+  }
+  .tabs a {
+    padding: 6px 12px;
+    font-size: .75rem;
+  }
+  .modal-backdrop {
+    padding: var(--space-4);
+  }
+  .modal-content {
+    padding: var(--space-4);
+  }
+}
+
+/* スマートフォン：ヘッダーを縦並びに、Modal を viewport いっぱいに */
+@media (max-width: 640px) {
+  .glass-panel {
+    padding: var(--space-3);
+    border-radius: var(--r);
+  }
+  .modal-backdrop {
+    padding: var(--space-3);
+    align-items: flex-start !important;
+  }
+  .modal-content {
+    width: 100%;
+    padding: var(--space-3);
+    border-radius: var(--r);
+  }
+  .modal-footer {
+    flex-wrap: wrap;
+  }
+  /* タブ navigation は横スクロール可能に */
+  .tabs {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
