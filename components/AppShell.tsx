@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <img
             src="https://app.instyle.group/_shared/static/logo.svg"
             alt="INSTYLE GROUP"
-            style={{ height: 8, width: "auto", display: "block", opacity: 0.9 }}
+            style={{ height: 14, width: "auto", display: "block", opacity: 0.85 }}
           />
           <strong
             className="t-h4"

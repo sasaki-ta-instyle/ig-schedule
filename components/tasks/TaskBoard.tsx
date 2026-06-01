@@ -87,18 +87,54 @@ const taskListStyle: CSSProperties = {
   gap: 2,
 };
 
-const dragOverlayStyle: CSSProperties = {
-  ...baseRowStyle,
-  background: "rgba(255,255,255,.85)",
-  backdropFilter: "blur(10px)",
-  WebkitBackdropFilter: "blur(10px)",
-  boxShadow: "0 8px 24px rgba(53,54,45,.18)",
+// ドラッグ中のオーバーレイ。元の行は薄くなり、こちらが浮いて追従する。
+// 「何を運んでいるか」を一瞥で示すため、プロジェクト名 → タスク名 → 担当/工数
+// の 3 段で表示するカード型に。
+const dragOverlayCardStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  padding: "var(--space-3) var(--space-4)",
+  borderRadius: "var(--r)",
+  background: "var(--glass-light)",
+  backdropFilter: "var(--glass-blur-sm)",
+  WebkitBackdropFilter: "var(--glass-blur-sm)",
+  boxShadow: "var(--glass-shadow)",
+  border: "1px solid var(--glass-border-l)",
   cursor: "grabbing",
+  minWidth: 240,
+  maxWidth: 360,
+};
+
+const dragOverlayProjectStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: ".6875rem",
+  color: "var(--color-text-muted)",
+  letterSpacing: ".04em",
+  textTransform: "uppercase",
+};
+
+const dragOverlayProjectDotStyle: CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  flexShrink: 0,
 };
 
 const dragOverlayTitleStyle: CSSProperties = {
-  fontSize: ".8125rem",
+  fontSize: ".875rem",
+  fontWeight: 600,
   color: "var(--color-text)",
+  lineHeight: 1.35,
+};
+
+const dragOverlayMetaStyle: CSSProperties = {
+  display: "flex",
+  gap: 10,
+  fontSize: ".75rem",
+  color: "var(--color-text-muted)",
 };
 
 type Member = { id: number; name: string; color: string };
@@ -518,6 +554,14 @@ export function TaskBoard() {
 
   const activeTask =
     activeId != null ? tasksById.get(activeId) ?? null : null;
+  const activeProject =
+    activeTask != null
+      ? (projects ?? []).find((p) => p.id === activeTask.projectId) ?? null
+      : null;
+  const activeAssignee =
+    activeTask?.assigneeMemberId != null
+      ? memberById[activeTask.assigneeMemberId] ?? null
+      : null;
 
   return (
     <DndContext
@@ -878,15 +922,31 @@ export function TaskBoard() {
     </section>
     <DragOverlay>
       {activeTask ? (
-        <div style={dragOverlayStyle}>
-          <span style={dragHandleStyle}>⋮⋮</span>
-          <input
-            type="checkbox"
-            className="checkbox"
-            checked={activeTask.done}
-            readOnly
-          />
-          <span style={dragOverlayTitleStyle}>{activeTask.title}</span>
+        <div style={dragOverlayCardStyle}>
+          {activeProject && (
+            <div style={dragOverlayProjectStyle}>
+              <span
+                style={{
+                  ...dragOverlayProjectDotStyle,
+                  background: activeProject.color,
+                }}
+                aria-hidden="true"
+              />
+              {activeProject.name}
+            </div>
+          )}
+          <div style={dragOverlayTitleStyle}>{activeTask.title}</div>
+          <div style={dragOverlayMetaStyle}>
+            <span>
+              {activeAssignee ? activeAssignee.name : "未割当"}
+            </span>
+            <span>{weekIsoLabel(activeTask.weekIso)}</span>
+            {activeTask.estimatedHours != null && (
+              <span className="mono">
+                {Number(activeTask.estimatedHours)}h
+              </span>
+            )}
+          </div>
         </div>
       ) : null}
     </DragOverlay>

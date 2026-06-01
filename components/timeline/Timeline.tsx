@@ -257,16 +257,20 @@ export function Timeline() {
           ))}
         </div>
 
-        <div className="timeline-axis-months" aria-hidden="true">
-          {weeks.map((w, i) => (
-            <div
-              key={w}
-              className={i === todayIdx ? "is-today" : undefined}
-              title={w}
-            >
-              {weekStartLabel(w)}
-            </div>
-          ))}
+        <div className="timeline-axis-months">
+          {weeks.map((w, i) => {
+            const isToday = i === todayIdx;
+            return (
+              <div
+                key={w}
+                className={isToday ? "is-today" : undefined}
+                title={w}
+                aria-label={isToday ? `今週 (${w})` : undefined}
+              >
+                {weekStartLabel(w)}
+              </div>
+            );
+          })}
         </div>
 
         {(projects?.length ?? 0) === 0 && (

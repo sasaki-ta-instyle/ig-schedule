@@ -858,14 +858,22 @@ const HoursBadge = memo(function HoursBadge({
       ? `計画 ${planned}h + 定例 ${extraRecurring}h = ${total}h`
       : undefined;
   if (!isEdit) {
+    // 超過は「色だけ」に依存せず、テキスト「超過」+ 警告アイコン (△) を併記する。
+    // 警告レベルは error (赤) から warn (橙) に下げる — 容量超過は致命ではなく注意喚起。
     return (
       <div
-        className={`badge ${over ? "badge-error" : total === 0 ? "" : "badge-ok"}`}
+        className={`badge ${over ? "badge-warn" : total === 0 ? "" : "badge-ok"}`}
         style={{ width: "fit-content" }}
         title={tipTitle}
       >
+        {over && (
+          <span aria-hidden="true" style={{ marginRight: 2 }}>
+            △
+          </span>
+        )}
         <strong className="mono">{total || "—"}</strong>
         <span className="muted">/ {capacity}h</span>
+        {over && <span className="muted">超過</span>}
         {extraRecurring > 0 && (
           <span
             className="muted"
@@ -895,7 +903,15 @@ const HoursBadge = memo(function HoursBadge({
           const next = Number(draft);
           if (Number.isFinite(next) && next !== planned) onChange(next);
         }}
-        style={{ width: 64, padding: "4px 8px", fontSize: ".75rem" }}
+        style={{
+          // 3 桁工数 (例: 168h) も読めるよう、固定幅 → 内容に応じて伸びる幅に。
+          // minWidth で「縮みすぎ」を、maxWidth で「広がりすぎ」を防ぐ。
+          minWidth: 64,
+          maxWidth: 88,
+          width: "5.5ch",
+          padding: "var(--space-1) var(--space-2)",
+          fontSize: ".75rem",
+        }}
       />
       <span className="t-small muted">/ {capacity}h</span>
       {extraRecurring > 0 && (
@@ -904,7 +920,13 @@ const HoursBadge = memo(function HoursBadge({
         </span>
       )}
       {over && (
-        <span className="badge badge-error" style={{ fontSize: ".625rem" }}>
+        <span
+          className="badge badge-warn"
+          style={{ fontSize: ".625rem" }}
+        >
+          <span aria-hidden="true" style={{ marginRight: 2 }}>
+            △
+          </span>
           超過
         </span>
       )}

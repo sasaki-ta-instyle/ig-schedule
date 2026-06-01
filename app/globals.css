@@ -35,6 +35,16 @@
   --r-xl:   32px;
   --r-pill: 999px;
 
+  /* 8px グリッド準拠の余白トークン。padding/gap/margin の数値リテラル直書きを
+     避けるため、Phase 0 で先行追加する。Phase 1 以降の修正は本トークンを使う。 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
   --corner-shape:      superellipse(2.5);
   --corner-shape-hard: superellipse(3.5);
 
@@ -402,10 +412,23 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   border-left: 1px solid rgba(196,193,176,.40);
   padding: 2px 0;
 }
+/* 「今週」列のマーカー。一目で現在週を識別できるように、
+   上端に 4px のアクセント帯 + 半透明の glass tint を載せる。
+   将来的に列全体への縦ストライプ拡張は Phase 3 で検討。 */
 .timeline-axis-months > div.is-today {
+  position: relative;
   color: var(--color-text);
-  font-weight: 600;
-  background: rgba(255,255,255,.45);
+  font-weight: 700;
+  background: rgba(56, 83, 123, 0.12);
+  border-left-color: rgba(56, 83, 123, 0.55);
+}
+.timeline-axis-months > div.is-today::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--color-info, #38537B);
+  border-radius: 2px 2px 0 0;
 }
 
 .timeline-milestones {
