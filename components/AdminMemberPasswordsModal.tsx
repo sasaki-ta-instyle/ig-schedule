@@ -100,8 +100,7 @@ export function AdminMemberPasswordsModal({
       }}
     >
       <div
-        className="glass-panel modal-content modal-content--md"
-        style={{ maxHeight: "90vh", overflow: "auto" }}
+        className="glass-panel modal-content modal-content--md modal-content--scroll"
       >
         <span className="eyebrow">ADMIN</span>
         <h3 className="t-h4" style={{ marginTop: 4, marginBottom: 6 }}>

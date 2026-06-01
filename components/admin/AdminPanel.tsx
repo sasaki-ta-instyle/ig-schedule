@@ -7,6 +7,7 @@ import { useEditMode } from "@/hooks/useEditMode";
 import { ProjectCreateModal } from "./ProjectCreateModal";
 import { ProjectAddTasksModal } from "./ProjectAddTasksModal";
 import { SearchFilterBar } from "@/components/common/SearchFilterBar";
+import { ActionMenu } from "@/components/common/ActionMenu";
 import { COMPANIES, type Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
 import { LinkifiedText } from "@/components/LinkifiedText";
@@ -22,6 +23,7 @@ type Project = {
   color: string;
   status: string;
   plannedMemberIds: number[];
+  isPrivate?: boolean;
 };
 
 const PAGE_SIZE_STORAGE_KEY = "ig-schedule:admin-projects-page-size";
@@ -578,30 +580,33 @@ function ProjectRow({
       className="glass-card"
       style={{
         padding: 14,
-        outline: selected ? "2px solid var(--color-accent, #38537B)" : "none",
+        outline: selected ? "2px solid var(--color-info)" : "none",
         outlineOffset: -2,
       }}
     >
+      {/* 閲覧/編集モードで grid 列数を固定し layout shift を解消。
+          編集モード固有の操作（一括選択チェック / タスク追加 CTA / ︙ メニュー）は
+          各列内に置き、未編集時は空セルや非表示で構造を保つ。 */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: isEdit
-            ? "auto auto 1fr 120px 140px auto auto auto auto"
-            : "auto 1fr auto 140px auto",
-          gap: 10,
+          gridTemplateColumns: "24px 12px 1fr 120px 140px auto auto auto",
+          gap: "var(--space-3)",
           alignItems: "center",
         }}
       >
-        {isEdit && (
-          <input
-            type="checkbox"
-            className="checkbox"
-            checked={selected}
-            onChange={onToggleSelected}
-            title="一括操作の対象に追加"
-            aria-label={`${p.name} を選択`}
-          />
-        )}
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          {isEdit ? (
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={selected}
+              onChange={onToggleSelected}
+              title="一括操作の対象に追加"
+              aria-label={`${p.name} を選択`}
+            />
+          ) : null}
+        </div>
         <span
           aria-label={`主担当の色 ${p.color}`}
           title="主担当の色（自動）"
@@ -613,18 +618,36 @@ function ProjectRow({
           }}
         />
 
-        {isEdit ? (
-          <input
-            className="input editable-only"
-            defaultValue={p.name}
-            onBlur={(e) => {
-              const v = e.currentTarget.value.trim();
-              if (v && v !== p.name) onUpdate({ name: v });
-            }}
-          />
-        ) : (
-          <strong>{p.name}</strong>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          {p.isPrivate && (
+            <span
+              aria-label="非公開プロジェクト"
+              title="非公開プロジェクト（担当 + 閲覧許可メンバーのみに見える）"
+              style={{
+                fontSize: ".875rem",
+                color: "var(--color-text-muted)",
+                flexShrink: 0,
+              }}
+            >
+              🔒
+            </span>
+          )}
+          {isEdit ? (
+            <input
+              className="input editable-only"
+              defaultValue={p.name}
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                if (v && v !== p.name) onUpdate({ name: v });
+              }}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+          ) : (
+            <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {p.name}
+            </strong>
+          )}
+        </div>
 
         {isEdit ? (
           <select
@@ -673,36 +696,44 @@ function ProjectRow({
           {expanded ? "閉じる" : "詳細"} {expanded ? "▴" : "▾"}
         </button>
 
-        {isEdit && (
-          <>
+        {/* 主役 CTA: タスク追加。視覚的に primary tone */}
+        {isEdit ? (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm edit-only"
+            onClick={onAddTasks}
+            title="AI でたたき台を生成、または手動でこのプロジェクトにタスクを追加"
+            style={{ fontSize: ".75rem" }}
+          >
+            ＋ タスク追加
+          </button>
+        ) : (
+          <span />
+        )}
+
+        {/* 副次アクションは ︙ メニューに集約 */}
+        {isEdit ? (
+          <ActionMenu label="その他のアクション">
             <button
               type="button"
-              className="btn btn-ghost btn-sm edit-only"
-              onClick={onAddTasks}
-              title="AI でたたき台を生成、または手動でこのプロジェクトにタスクを追加"
-              style={{ fontSize: ".75rem" }}
-            >
-              ＋ タスク追加
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm edit-only"
+              role="menuitem"
               onClick={onArchive}
               title="ダッシュボードから外しアーカイブに移動（あとで復元可）"
-              style={{ fontSize: ".75rem" }}
             >
               アーカイブ
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-sm edit-only"
+              role="menuitem"
+              className="menu-item--destructive"
               onClick={onDelete}
               title="関連タスク・工数ごと完全削除（取り消し不可）"
-              style={{ fontSize: ".75rem", color: "var(--color-error)" }}
             >
               削除
             </button>
-          </>
+          </ActionMenu>
+        ) : (
+          <span />
         )}
       </div>
 

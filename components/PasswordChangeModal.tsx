@@ -58,7 +58,7 @@ export function PasswordChangeModal({
       }}
     >
       <form
-        className="glass-panel modal-content modal-content--sm"
+        className="glass-panel modal-content modal-content--sm modal-content--scroll"
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit) handle();

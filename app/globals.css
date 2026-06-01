@@ -314,6 +314,74 @@ summary:focus-visible,
 .project-header-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.42);
 }
+
+/* ── ActionMenu (︙ popover) ── */
+.action-menu {
+  position: relative;
+  display: inline-block;
+}
+.action-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 1rem;
+  line-height: 1;
+}
+.action-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.action-menu[open] > summary {
+  background: rgba(255, 255, 255, 0.55);
+}
+.action-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  background: var(--glass-light);
+  backdrop-filter: var(--glass-blur-sm);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  border: 1px solid var(--glass-border-l);
+  border-radius: var(--r-sm);
+  box-shadow: var(--glass-shadow);
+  padding: var(--space-1);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.action-menu-list button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-sm);
+  text-align: left;
+  font: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.action-menu-list button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.55);
+}
+.action-menu-list .menu-item--destructive {
+  color: #9C1212;
+}
+.action-menu-list .menu-item--destructive:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.12);
+}
+
+/* ── Modal overflow trap 対策 (reviewer M1) ──
+   `align-items: center` を inline override する Modal でも、コンテンツが viewport を
+   超えたときに上端へ到達できるよう、内側に最大高さ + scroll を効かせる仕掛けを用意。
+   各 Modal の content に .modal-content--scroll を付けて使う。 */
+.modal-content--scroll {
+  max-height: calc(100vh - var(--space-8) * 2);
+  overflow-y: auto;
+}
 .input::placeholder { color: var(--color-text-light); }
 select.input { cursor: pointer; }
 textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }

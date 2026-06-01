@@ -60,7 +60,7 @@ export function PasswordPrompt({
       }}
     >
       <form
-        className="glass-panel modal-content modal-content--sm"
+        className="glass-panel modal-content modal-content--sm modal-content--scroll"
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit && memberId != null) onSubmit(memberId, pw);

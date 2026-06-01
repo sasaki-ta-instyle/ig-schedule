@@ -210,9 +210,7 @@ export function ArchivedProjectsPanel() {
                   : "auto 1fr auto",
                 gap: 10,
                 alignItems: "center",
-                outline: selected
-                  ? "2px solid var(--color-accent, #38537B)"
-                  : "none",
+                outline: selected ? "2px solid var(--color-info)" : "none",
                 outlineOffset: -2,
               }}
             >
