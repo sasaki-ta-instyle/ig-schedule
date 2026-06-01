@@ -573,6 +573,34 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
         </p>
       ) : (
         <div>
+          {/* スマホで縦カードになるとメンバー間移動が長くなるため、上部に
+              アンカーリンクの pill 群を出す。PC では CSS で非表示。 */}
+          <nav
+            className="dashboard-member-anchors"
+            aria-label="メンバーへ移動"
+          >
+            {members.map((m) => (
+              <a
+                key={m.id}
+                href={`#dashboard-member-${m.id}`}
+                className={
+                  m.id === currentMemberIdInDash ? "is-self" : undefined
+                }
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: m.color,
+                    display: "inline-block",
+                  }}
+                />
+                {m.name}
+              </a>
+            ))}
+          </nav>
           <table
             className="dashboard-table"
             style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%" }}
@@ -651,7 +679,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
             </thead>
             <tbody>
               {members.map((m) => (
-                <tr key={m.id}>
+                <tr key={m.id} id={`dashboard-member-${m.id}`}>
                   <th
                     style={{
                       position: "sticky",

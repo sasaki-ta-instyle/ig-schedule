@@ -63,8 +63,14 @@
 
 html {
   background: var(--color-bg);
-  scroll-behavior: smooth;
   font-size: 14px;
+}
+/* OS で「視差を減らす」を有効にしていないユーザーにだけ smooth scroll を適用。
+   WCAG 2.3.3 配慮。 */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -1215,11 +1221,59 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   .dashboard-table tr > td.dashboard-row-self {
     background: rgba(255, 255, 255, 0.55);
   }
+
+  /* ── 4-9. Dashboard メンバーアンカーリンク ──
+     縦カードで 6 メンバー分の長い縦スクロールを short cut。 */
+  .dashboard-member-anchors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2);
+    background: rgba(243, 241, 238, 0.55);
+    border-radius: var(--r-sm);
+  }
+  .dashboard-member-anchors a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--r-pill);
+    background: var(--glass-warm);
+    border: 1px solid var(--glass-border-w);
+    font-size: .8125rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    box-shadow: var(--glass-hl);
+  }
+  .dashboard-member-anchors a.is-self {
+    color: var(--color-text);
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.92);
+  }
+  /* メンバーカードに飛んだとき、AppShell の sticky header に隠れない位置に
+     スクロールする。 */
+  /* ハンバーガー drawer 展開時の高さも考慮して 120px。 */
+  .dashboard-table tr[id^="dashboard-member-"] {
+    scroll-margin-top: 120px;
+  }
 }
 
 /* ── 4-4. Dashboard 自分の行ハイライト（全幅で共通） ── */
 .dashboard-row-self {
   background: rgba(255, 255, 255, 0.32);
+}
+
+/* スマホ Dashboard 用のメンバーアンカーリンク。
+   PC では非表示。スマホで table を縦カードにしたとき、長い縦スクロールを
+   short cut するための pill 群。
+   ※ media query で「PC 用 hide」と「スマホ用 show」を排他で書くことで、
+   ソース順による cascade 事故を避ける。 */
+@media (min-width: 641px) {
+  .dashboard-member-anchors {
+    display: none;
+  }
 }
 
 /* ハンバーガー: PC では完全に存在しない。Phase 4 のスマホ用 ── */
