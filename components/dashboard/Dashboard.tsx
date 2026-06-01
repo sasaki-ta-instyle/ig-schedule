@@ -573,7 +573,10 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
         </p>
       ) : (
         <div>
-          <table style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%" }}>
+          <table
+            className="dashboard-table"
+            style={{ borderCollapse: "separate", borderSpacing: 6, width: "100%" }}
+          >
             <thead>
               <tr>
                 <th
@@ -698,6 +701,12 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                         className={`glass-cell${
                           m.id === currentMemberIdInDash ? " dashboard-row-self" : ""
                         }`}
+                        // スマホで table を縦カード化したとき、各セルに週ラベルを
+                        // ::before で出すための data 属性。PC では未使用。
+                        data-week-label={weekIsoLabel(w)}
+                        // a11y: モバイルで thead を display:none にするため、各セルが
+                        // どのメンバー・どの週か screen reader に直接読ませる
+                        aria-label={`${m.name} ${weekIsoLabel(w)}`}
                         style={{ verticalAlign: "top", minWidth: 160 }}
                       >
                         <HoursBadge

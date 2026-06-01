@@ -1160,6 +1160,61 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   .timeline-member-filter {
     flex-wrap: wrap;
   }
+
+  /* ── 4-8. Dashboard を縦カード化 ──
+     6×6 table をスマホでは「メンバー = カード、6 週セルを縦に積む」に変換。
+     table 要素を block 化することで semantic / a11y を保ちつつ見た目だけ
+     スマホ向けに切り替える。 */
+  .dashboard-table,
+  .dashboard-table tbody,
+  .dashboard-table tr,
+  .dashboard-table td,
+  .dashboard-table th {
+    display: block;
+    width: auto;
+    min-width: 0 !important;
+  }
+  .dashboard-table thead {
+    display: none;
+  }
+  .dashboard-table tr {
+    background: rgba(255, 255, 255, 0.32);
+    border-radius: var(--r);
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+  /* メンバー名見出し（左 sticky を解いて単純な見出しに）。
+     inline で当たっている backdrop-filter / zIndex も明示的に打ち消し、
+     カード内に二重 blur が乗らないようにする。 */
+  .dashboard-table tr > th:first-child {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    padding: 0 0 var(--space-2) !important;
+    font-size: 1rem;
+    font-weight: 700;
+    box-shadow: none;
+    z-index: auto;
+  }
+  .dashboard-table tr > td {
+    margin-bottom: var(--space-2);
+    padding: var(--space-2);
+  }
+  /* 各セルの先頭に週ラベル（data-week-label="2026-W23 (6/2-)" などを ::before で表示） */
+  .dashboard-table tr > td[data-week-label]::before {
+    content: attr(data-week-label);
+    display: block;
+    font-size: .6875rem;
+    color: var(--color-text-muted);
+    letter-spacing: .06em;
+    margin-bottom: var(--space-1);
+  }
+  /* モバイルではカード全体に rgba(.32) の背景があるため、自分の行 tint も
+     強めに上書きしないと差が出ない。 */
+  .dashboard-table tr > td.dashboard-row-self {
+    background: rgba(255, 255, 255, 0.55);
+  }
 }
 
 /* ── 4-4. Dashboard 自分の行ハイライト（全幅で共通） ── */
