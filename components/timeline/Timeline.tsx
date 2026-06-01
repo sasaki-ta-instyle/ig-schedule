@@ -44,7 +44,6 @@ type Member = {
 
 const WEEK_COUNT = 12;
 const PAST_OFFSET = -2;
-const REFRESH_MS = 5000;
 
 function hexToRgba(hex: string, alpha: number): string {
   const m = hex.match(/^#([0-9a-f]{6})$/i);
@@ -75,17 +74,12 @@ export function Timeline() {
   const weekFrom = weeks[0];
   const weekTo = weeks[WEEK_COUNT - 1];
 
-  const { data: projects } = useSWR<Project[]>("/api/projects", fetcher, {
-    refreshInterval: REFRESH_MS,
-  });
+  const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
   const { data: tasks } = useSWR<Task[]>(
     `/api/tasks?weekFrom=${weekFrom}&weekTo=${weekTo}`,
     fetcher,
-    { refreshInterval: REFRESH_MS },
   );
-  const { data: members } = useSWR<Member[]>("/api/members", fetcher, {
-    refreshInterval: REFRESH_MS,
-  });
+  const { data: members } = useSWR<Member[]>("/api/members", fetcher);
 
   const membersById = useMemo(() => {
     const m = new Map<number, Member>();

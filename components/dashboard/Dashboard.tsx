@@ -1,7 +1,15 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   addWeeks,
@@ -13,6 +21,7 @@ import { weeklyCapacityHours } from "@/lib/capacity";
 import { holidaysInWeek } from "@/lib/holidays";
 import { WORK_RULES } from "@/lib/work-rules";
 import { fetcher, postJson } from "@/lib/api";
+import { SWR_REFRESH_MS } from "@/lib/swr-config";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import { useTaskHistory } from "@/hooks/useTaskHistory";
@@ -60,7 +69,6 @@ type Project = {
 };
 
 const WEEK_COUNT = 6;
-const REFRESH_MS = 5000;
 
 export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
   const { isEdit: editToggled } = useEditMode();
@@ -71,20 +79,18 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
   const weekFrom = weeks[0];
   const weekTo = weeks[weeks.length - 1];
 
-  const { data: members } = useSWR<Member[]>("/api/members", fetcher, {
-    refreshInterval: REFRESH_MS,
-  });
+  // ポーリング設定はグローバルな SWRProvider 側（lib/swr-config.tsx）で集約済み。
+  // アーカイブビューの workload だけは更新頻度が無意味なので個別に止める。
+  const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const projectsKey = archived ? "/api/projects?archived=1" : "/api/projects";
-  const { data: projects } = useSWR<Project[]>(projectsKey, fetcher, {
-    refreshInterval: REFRESH_MS,
-  });
+  const { data: projects } = useSWR<Project[]>(projectsKey, fetcher);
   const tasksKey = `/api/tasks?weekFrom=${weekFrom}&weekTo=${weekTo}`;
-  const { data: tasks } = useSWR<Task[]>(tasksKey, fetcher, {
-    refreshInterval: REFRESH_MS,
-  });
+  const { data: tasks } = useSWR<Task[]>(tasksKey, fetcher);
   const workloadKey = `/api/workload?weekFrom=${weekFrom}&weekTo=${weekTo}`;
+  // SWR v2 の mergeObjects は単純 spread のため `undefined` を渡すと provider 値を
+  // 踏み潰す。明示的に SWR_REFRESH_MS を入れて provider 値と同期させる。
   const { data: workload } = useSWR<Workload[]>(workloadKey, fetcher, {
-    refreshInterval: archived ? 0 : REFRESH_MS,
+    refreshInterval: archived ? 0 : SWR_REFRESH_MS,
   });
   const { pushHistory } = useTaskHistory();
 
@@ -117,16 +123,13 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
       window.removeEventListener("scroll", onScroll, { capture: true });
   }, [tooltip]);
   const recurringKey = archived ? null : "/api/recurring-tasks";
-  const { data: recurring } = useSWR<RecurringTaskDTO[]>(recurringKey, fetcher, {
-    refreshInterval: REFRESH_MS,
-  });
+  const { data: recurring } = useSWR<RecurringTaskDTO[]>(recurringKey, fetcher);
   const recurringCompletionsKey = archived
     ? null
     : `/api/recurring-tasks/completions?weekFrom=${weekFrom}&weekTo=${weekTo}`;
   const { data: recurringCompletions } = useSWR<RecurringCompletionDTO[]>(
     recurringCompletionsKey,
     fetcher,
-    { refreshInterval: REFRESH_MS },
   );
 
   const projectsById = useMemo(() => {
@@ -182,6 +185,14 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     return m;
   }, [visibleTasks]);
 
+  // useCallback 化したハンドラから「最新の cellTasks」を参照するための ref。
+  // 依存配列に tasksByKey を入れるとハンドラ参照が毎レンダー変わって行 memo が
+  // 破れてしまうので、参照のみ ref で持ち、依存を空にして安定化させる。
+  const tasksByKeyRef = useRef(tasksByKey);
+  useEffect(() => {
+    tasksByKeyRef.current = tasksByKey;
+  }, [tasksByKey]);
+
   const virtualRecurring = useMemo(
     () =>
       archived
@@ -209,45 +220,57 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     [archived, recurring, weeks],
   );
 
-  async function setHours(memberId: number, weekIso: string, hours: number) {
-    const next = Math.max(0, Math.min(168, hours));
-    await postJson(
-      `/api/workload`,
-      { memberId, weekIso, plannedHours: next },
-      "PUT",
-    );
-    mutate(workloadKey);
-  }
+  const setHours = useCallback(
+    async (memberId: number, weekIso: string, hours: number) => {
+      const next = Math.max(0, Math.min(168, hours));
+      await postJson(
+        `/api/workload`,
+        { memberId, weekIso, plannedHours: next },
+        "PUT",
+      );
+      mutate(workloadKey);
+    },
+    [workloadKey],
+  );
 
-  async function toggleDone(task: Task) {
-    await postJson(`/api/tasks/${task.id}`, { done: !task.done }, "PATCH");
-    mutate(tasksKey);
-  }
+  const toggleDone = useCallback(
+    async (task: Task) => {
+      await postJson(`/api/tasks/${task.id}`, { done: !task.done }, "PATCH");
+      mutate(tasksKey);
+    },
+    [tasksKey],
+  );
 
-  async function toggleRecurringDone(v: VirtualRecurringTask) {
-    if (!recurringCompletionsKey) return;
-    await postJson(
-      `/api/recurring-tasks/${v.recurringId}/completions`,
-      { weekIso: v.weekIso, done: !v.done },
-    );
-    mutate(recurringCompletionsKey);
-  }
+  const toggleRecurringDone = useCallback(
+    async (v: VirtualRecurringTask) => {
+      if (!recurringCompletionsKey) return;
+      await postJson(
+        `/api/recurring-tasks/${v.recurringId}/completions`,
+        { weekIso: v.weekIso, done: !v.done },
+      );
+      mutate(recurringCompletionsKey);
+    },
+    [recurringCompletionsKey],
+  );
 
-  async function addQuickTask(
-    memberId: number,
-    weekIso: string,
-    projectId: number,
-    title: string,
-  ) {
-    if (!title.trim()) return;
-    await postJson("/api/tasks", {
-      projectId,
-      assigneeMemberId: memberId,
-      weekIso,
-      title: title.trim(),
-    });
-    mutate(tasksKey);
-  }
+  const addQuickTask = useCallback(
+    async (
+      memberId: number,
+      weekIso: string,
+      projectId: number,
+      title: string,
+    ) => {
+      if (!title.trim()) return;
+      await postJson("/api/tasks", {
+        projectId,
+        assigneeMemberId: memberId,
+        weekIso,
+        title: title.trim(),
+      });
+      mutate(tasksKey);
+    },
+    [tasksKey],
+  );
 
   function applyWorkloadDelta(
     prev: Workload[],
@@ -292,13 +315,13 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
 
   // taskId の weekIso を fromWeek → toWeek へ変えるコアコミット。
   // do / undo どちらでも同じ実装で動かすため fromWeek を引数で受ける。
-  async function commitWeekChange(
+  const commitWeekChange = useCallback(async (
     taskId: number,
     fromWeek: string,
     toWeek: string,
     memberId: number | null,
     hours: number,
-  ) {
+  ) => {
     await mutate(
       tasksKey,
       async () => {
@@ -333,9 +356,9 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     } else {
       mutate(workloadKey);
     }
-  }
+  }, [tasksKey, workloadKey]);
 
-  async function shiftWeek(task: Task, delta: -1 | 1) {
+  const shiftWeek = useCallback(async (task: Task, delta: -1 | 1) => {
     const fromWeek = task.weekIso;
     const toWeek = addWeeks(fromWeek, delta);
     const hours = task.estimatedHours ? Number(task.estimatedHours) : 0;
@@ -351,9 +374,10 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
       do: () => commitWeekChange(task.id, fromWeek, toWeek, memberId, hours),
       undo: () => commitWeekChange(task.id, toWeek, fromWeek, memberId, hours),
     });
-  }
+  }, [commitWeekChange, pushHistory]);
 
-  async function shiftAllUnfinishedToNextWeek(cellTasks: Task[]) {
+  const shiftAllUnfinishedToNextWeek = useCallback(async (cellKey: string) => {
+    const cellTasks = tasksByKeyRef.current[cellKey] ?? [];
     const undone = cellTasks.filter((t) => !t.done);
     if (undone.length === 0) return;
     if (
@@ -405,7 +429,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
     }
     mutate(tasksKey);
     mutate(workloadKey);
-  }
+  }, [tasksKey, workloadKey]);
 
   function applyOptimisticOrder(map: Map<number, number>) {
     return (prev: Task[] = []) =>
@@ -421,7 +445,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
         );
   }
 
-  async function commitReorderMap(map: Map<number, number>) {
+  const commitReorderMap = useCallback(async (map: Map<number, number>) => {
     await mutate<Task[]>(
       tasksKey,
       async (current) => {
@@ -440,13 +464,17 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
         revalidate: false,
       },
     );
-  }
+  }, [tasksKey]);
 
-  async function reorderInCell(
-    cellTasks: Task[],
-    index: number,
+  const reorderInCell = useCallback(async (
+    task: Task,
     delta: -1 | 1,
-  ) {
+  ) => {
+    if (task.assigneeMemberId == null) return;
+    const cellKey = `${task.assigneeMemberId}::${task.weekIso}`;
+    const cellTasks = tasksByKeyRef.current[cellKey] ?? [];
+    const index = cellTasks.findIndex((t) => t.id === task.id);
+    if (index < 0) return;
     const target = index + delta;
     if (target < 0 || target >= cellTasks.length) return;
     const next = [...cellTasks];
@@ -473,7 +501,15 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
       do: () => commitReorderMap(nextOrderMap),
       undo: () => commitReorderMap(prevOrderMap),
     });
-  }
+  }, [commitReorderMap, pushHistory, tasksKey]);
+
+  // 行コンポーネントに渡すハンドラは task を受け取る単一シグネチャに揃える。
+  // 親側で useCallback により参照を固定し、行は React.memo + 安定 props で
+  // 該当 task が変わらない限り再レンダーされない構造にしている。
+  const moveUp = useCallback((t: Task) => reorderInCell(t, -1), [reorderInCell]);
+  const moveDown = useCallback((t: Task) => reorderInCell(t, 1), [reorderInCell]);
+  const shiftPrev = useCallback((t: Task) => shiftWeek(t, -1), [shiftWeek]);
+  const shiftNext = useCallback((t: Task) => shiftWeek(t, 1), [shiftWeek]);
 
   return (
     <section
@@ -680,15 +716,13 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                               task={t}
                               project={projectsById[t.projectId]}
                               isEdit={isEdit}
-                              onToggle={() => toggleDone(t)}
                               canMoveUp={idx > 0}
                               canMoveDown={idx < cellTasks.length - 1}
-                              onMoveUp={() => reorderInCell(cellTasks, idx, -1)}
-                              onMoveDown={() =>
-                                reorderInCell(cellTasks, idx, 1)
-                              }
-                              onShiftPrev={() => shiftWeek(t, -1)}
-                              onShiftNext={() => shiftWeek(t, 1)}
+                              onToggle={toggleDone}
+                              onMoveUp={moveUp}
+                              onMoveDown={moveDown}
+                              onShiftPrev={shiftPrev}
+                              onShiftNext={shiftNext}
                               onShowTooltip={showTooltip}
                               onHideTooltip={hideTooltip}
                             />
@@ -698,7 +732,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                               key={v.id}
                               v={v}
                               isEdit={isEdit}
-                              onToggle={() => toggleRecurringDone(v)}
+                              onToggle={toggleRecurringDone}
                             />
                           ))}
                         </ul>
@@ -709,7 +743,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                               type="button"
                               className="edit-only"
                               onClick={() =>
-                                shiftAllUnfinishedToNextWeek(cellTasks)
+                                shiftAllUnfinishedToNextWeek(cellKey)
                               }
                               style={{
                                 marginTop: 6,
@@ -733,9 +767,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
                             memberId={m.id}
                             weekIso={w}
                             projects={projects ?? []}
-                            onAdd={(projectId, title) =>
-                              addQuickTask(m.id, w, projectId, title)
-                            }
+                            onAdd={addQuickTask}
                           />
                         )}
                       </td>
@@ -799,7 +831,7 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
   );
 }
 
-function HoursBadge({
+const HoursBadge = memo(function HoursBadge({
   planned,
   extraRecurring = 0,
   capacity,
@@ -878,46 +910,49 @@ function HoursBadge({
       )}
     </div>
   );
-}
+});
 
-function RecurringRow({
+const recurringRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 6,
+  fontSize: ".75rem",
+  lineHeight: 1.4,
+};
+
+const recurringBadgeStyle: CSSProperties = {
+  fontSize: ".5625rem",
+  padding: "1px 5px",
+  marginRight: 5,
+  background: "rgba(120, 120, 100, 0.15)",
+  color: "var(--color-text-muted)",
+  verticalAlign: "middle",
+};
+
+const RecurringRow = memo(function RecurringRow({
   v,
   isEdit,
   onToggle,
 }: {
   v: VirtualRecurringTask;
   isEdit: boolean;
-  onToggle: () => void;
+  onToggle: (v: VirtualRecurringTask) => void;
 }) {
+  const handleToggle = useCallback(() => onToggle(v), [onToggle, v]);
   const hours = v.estimatedHours == null ? 0 : Number(v.estimatedHours);
   return (
-    <li
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 6,
-        fontSize: ".75rem",
-        lineHeight: 1.4,
-      }}
-    >
+    <li style={recurringRowStyle}>
       <input
         type="checkbox"
         className="checkbox"
         checked={v.done}
-        onChange={onToggle}
+        onChange={handleToggle}
         disabled={!isEdit}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         <span
           className="badge"
-          style={{
-            fontSize: ".5625rem",
-            padding: "1px 5px",
-            marginRight: 5,
-            background: "rgba(120, 120, 100, 0.15)",
-            color: "var(--color-text-muted)",
-            verticalAlign: "middle",
-          }}
+          style={recurringBadgeStyle}
           title="定例タスク（/recurring で編集）"
         >
           定例
@@ -941,9 +976,9 @@ function RecurringRow({
       </div>
     </li>
   );
-}
+});
 
-const moveBtnStyle: React.CSSProperties = {
+const moveBtnStyle: CSSProperties = {
   fontSize: ".625rem",
   lineHeight: 1,
   padding: "2px 4px",
@@ -955,7 +990,32 @@ const moveBtnStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
-function TaskRow({
+const taskRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 6,
+  fontSize: ".75rem",
+  lineHeight: 1.4,
+};
+
+const taskRowDotStyle: CSSProperties = {
+  display: "inline-block",
+  width: 6,
+  height: 6,
+  borderRadius: 999,
+  marginRight: 5,
+  verticalAlign: "middle",
+};
+
+const taskRowMoveColStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 1,
+  flexShrink: 0,
+};
+
+const TaskRow = memo(function TaskRow({
   task,
   project,
   isEdit,
@@ -972,26 +1032,35 @@ function TaskRow({
   task: Task;
   project: Project | undefined;
   isEdit: boolean;
-  onToggle: () => void;
+  onToggle: (t: Task) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  onShiftPrev?: () => void;
-  onShiftNext?: () => void;
+  onMoveUp?: (t: Task) => void;
+  onMoveDown?: (t: Task) => void;
+  onShiftPrev?: (t: Task) => void;
+  onShiftNext?: (t: Task) => void;
   onShowTooltip: (rect: DOMRect, label: string) => void;
   onHideTooltip: () => void;
 }) {
   const liRef = useRef<HTMLLIElement>(null);
   const projectLabel = project?.name ?? "";
-  function showTip() {
+  const showTip = useCallback(() => {
     if (!projectLabel) return;
     const r = liRef.current?.getBoundingClientRect();
     if (r) onShowTooltip(r, projectLabel);
-  }
-  function hideTip() {
-    onHideTooltip();
-  }
+  }, [projectLabel, onShowTooltip]);
+  const hideTip = useCallback(() => onHideTooltip(), [onHideTooltip]);
+  const handleToggle = useCallback(() => onToggle(task), [onToggle, task]);
+  const handleMoveUp = useCallback(() => onMoveUp?.(task), [onMoveUp, task]);
+  const handleMoveDown = useCallback(() => onMoveDown?.(task), [onMoveDown, task]);
+  const handleShiftPrev = useCallback(
+    () => onShiftPrev?.(task),
+    [onShiftPrev, task],
+  );
+  const handleShiftNext = useCallback(
+    () => onShiftNext?.(task),
+    [onShiftNext, task],
+  );
 
   return (
     <li
@@ -1004,19 +1073,13 @@ function TaskRow({
       onMouseLeave={hideTip}
       onFocus={showTip}
       onBlur={hideTip}
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 6,
-        fontSize: ".75rem",
-        lineHeight: 1.4,
-      }}
+      style={taskRowStyle}
     >
       <input
         type="checkbox"
         className="checkbox"
         checked={task.done}
-        onChange={onToggle}
+        onChange={handleToggle}
         disabled={!isEdit}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1027,15 +1090,7 @@ function TaskRow({
         )}
         {project && (
           <span
-            style={{
-              display: "inline-block",
-              width: 6,
-              height: 6,
-              borderRadius: 999,
-              background: project.color,
-              marginRight: 5,
-              verticalAlign: "middle",
-            }}
+            style={{ ...taskRowDotStyle, background: project.color }}
           />
         )}
         <span
@@ -1048,19 +1103,10 @@ function TaskRow({
         </span>
       </div>
       {isEdit && (onMoveUp || onMoveDown || onShiftPrev || onShiftNext) && (
-        <div
-          className="edit-only"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 1,
-            flexShrink: 0,
-          }}
-        >
+        <div className="edit-only" style={taskRowMoveColStyle}>
           <button
             type="button"
-            onClick={onMoveUp}
+            onClick={handleMoveUp}
             disabled={!canMoveUp}
             title="上へ"
             style={moveBtnStyle}
@@ -1071,7 +1117,7 @@ function TaskRow({
             {onShiftPrev && (
               <button
                 type="button"
-                onClick={onShiftPrev}
+                onClick={handleShiftPrev}
                 title="前週へ戻す"
                 style={moveBtnStyle}
               >
@@ -1081,7 +1127,7 @@ function TaskRow({
             {onShiftNext && (
               <button
                 type="button"
-                onClick={onShiftNext}
+                onClick={handleShiftNext}
                 title="翌週へ移動"
                 style={moveBtnStyle}
               >
@@ -1091,7 +1137,7 @@ function TaskRow({
           </div>
           <button
             type="button"
-            onClick={onMoveDown}
+            onClick={handleMoveDown}
             disabled={!canMoveDown}
             title="下へ"
             style={moveBtnStyle}
@@ -1102,14 +1148,18 @@ function TaskRow({
       )}
     </li>
   );
-}
+});
 
 type QuickAddDraft = { projectId: number; title: string };
 const QUICK_ADD_DRAFT_VERSION = 1;
 const quickAddDraftKey = (memberId: number, weekIso: string) =>
   `ig-schedule:draft:quick-add:${memberId}:${weekIso}`;
 
-function QuickAdd({
+const quickAddFormStyle: CSSProperties = { display: "flex", gap: 4, marginTop: 6 };
+const quickAddSelectStyle: CSSProperties = { padding: "4px 6px", fontSize: ".6875rem", width: 64 };
+const quickAddInputStyle: CSSProperties = { padding: "4px 8px", fontSize: ".6875rem", flex: 1 };
+
+const QuickAdd = memo(function QuickAdd({
   memberId,
   weekIso,
   projects,
@@ -1118,7 +1168,7 @@ function QuickAdd({
   memberId: number;
   weekIso: string;
   projects: Project[];
-  onAdd: (projectId: number, title: string) => void;
+  onAdd: (memberId: number, weekIso: string, projectId: number, title: string) => void;
 }) {
   const draftKey = quickAddDraftKey(memberId, weekIso);
   const [initial] = useState<QuickAddDraft | null>(() =>
@@ -1142,11 +1192,11 @@ function QuickAdd({
   return (
     <form
       className="edit-only"
-      style={{ display: "flex", gap: 4, marginTop: 6 }}
+      style={quickAddFormStyle}
       onSubmit={(e) => {
         e.preventDefault();
         if (title.trim() && projectId) {
-          onAdd(projectId, title);
+          onAdd(memberId, weekIso, projectId, title);
           setTitle("");
           clearStoredDraft();
         }
@@ -1156,7 +1206,7 @@ function QuickAdd({
         className="input"
         value={projectId}
         onChange={(e) => setProjectId(Number(e.target.value))}
-        style={{ padding: "4px 6px", fontSize: ".6875rem", width: 64 }}
+        style={quickAddSelectStyle}
       >
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
@@ -1169,8 +1219,8 @@ function QuickAdd({
         placeholder="タスクを追加"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        style={{ padding: "4px 8px", fontSize: ".6875rem", flex: 1 }}
+        style={quickAddInputStyle}
       />
     </form>
   );
-}
+});

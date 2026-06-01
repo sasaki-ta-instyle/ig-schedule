@@ -1,9 +1,19 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { addWeeks, currentWeekIso, weekIsoLabel, weekIsoRange } from "@/lib/week";
 import { fetcher, postJson, del } from "@/lib/api";
+import { SWR_REFRESH_MS } from "@/lib/swr-config";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import { useTaskHistory } from "@/hooks/useTaskHistory";
@@ -11,12 +21,14 @@ import type { Company } from "@/lib/companies";
 import { CompanyChip } from "@/components/CompanyChip";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   KeyboardSensor,
   closestCenter,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -28,6 +40,66 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 const ROW_GRID_TASKBOARD = "20px auto 1fr 110px 110px 64px auto";
+
+const baseRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: ROW_GRID_TASKBOARD,
+  alignItems: "center",
+  gap: 8,
+  padding: "6px 8px",
+  borderRadius: "var(--r-sm)",
+};
+
+const dragHandleStyle: CSSProperties = {
+  padding: "2px 2px",
+  fontSize: ".875rem",
+  lineHeight: 1,
+  color: "var(--color-text-light)",
+  cursor: "grab",
+  touchAction: "none",
+};
+
+const dragHandleStyleDragging: CSSProperties = {
+  ...dragHandleStyle,
+  cursor: "grabbing",
+};
+
+const doneRowStyle: CSSProperties = {
+  ...baseRowStyle,
+  opacity: 0.55,
+};
+
+const doneRowHandleStyle: CSSProperties = {
+  fontSize: ".875rem",
+  lineHeight: 1,
+  color: "var(--color-text-light)",
+  textAlign: "center",
+  cursor: "not-allowed",
+};
+
+const removeBtnStyle: CSSProperties = { fontSize: ".75rem" };
+
+const taskListStyle: CSSProperties = {
+  listStyle: "none",
+  padding: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+};
+
+const dragOverlayStyle: CSSProperties = {
+  ...baseRowStyle,
+  background: "rgba(255,255,255,.85)",
+  backdropFilter: "blur(10px)",
+  WebkitBackdropFilter: "blur(10px)",
+  boxShadow: "0 8px 24px rgba(53,54,45,.18)",
+  cursor: "grabbing",
+};
+
+const dragOverlayTitleStyle: CSSProperties = {
+  fontSize: ".8125rem",
+  color: "var(--color-text)",
+};
 
 type Member = { id: number; name: string; color: string };
 type Project = {
@@ -49,7 +121,6 @@ type Task = {
   sortOrder: number;
 };
 
-const REFRESH_MS = 5000;
 const RANGE = 12;
 const EXPANDED_STORAGE_KEY = "ig-schedule:project-expanded";
 const PAGE_SIZE_STORAGE_KEY = "ig-schedule:projects-page-size";
@@ -64,7 +135,9 @@ export function TaskBoard() {
   const weekFrom = weeks[0];
   const weekTo = weeks[weeks.length - 1];
 
-  const [filterMember, setFilterMember] = useState<number | "all">("all");
+  const [filterMember, setFilterMember] = useState<
+    number | "all" | "unassigned"
+  >("all");
   const [filterProject, setFilterProject] = useState<number | "all">("all");
   const [filterDone, setFilterDone] = useState<"all" | "open" | "done">("all");
   const [keyword, setKeyword] = useState<string>("");
@@ -135,11 +208,19 @@ export function TaskBoard() {
     }
   }, [pageSize, pageSizeHydrated]);
 
+  // DnD 中はポーリングを止めて transform 計算と干渉させない。
+  // activeId が非 null の間は自動 revalidate を停止し、楽観更新だけが UI に反映される。
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const isDragging = activeId != null;
+
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: projects } = useSWR<Project[]>("/api/projects", fetcher);
   const tasksKey = `/api/tasks?weekFrom=${weekFrom}&weekTo=${weekTo}`;
+  // SWR v2 の mergeObjects は単純 spread のため `undefined` を渡すと provider 値を
+  // 踏み潰す。明示的に SWR_REFRESH_MS を入れて provider 値と同期させる。
   const { data: tasks } = useSWR<Task[]>(tasksKey, fetcher, {
-    refreshInterval: REFRESH_MS,
+    refreshInterval: isDragging ? 0 : SWR_REFRESH_MS,
+    revalidateOnFocus: !isDragging,
   });
 
   const memberById = useMemo(() => {
@@ -154,11 +235,19 @@ export function TaskBoard() {
     return m;
   }, [projects]);
 
-  const trimmedKeyword = keyword.trim().toLowerCase();
+  // 検索フィルタは入力ごとに全タスク走査 + groupedByWeek / visibleProjects 連鎖が
+  // 走る。React 19 の useDeferredValue で「タイプ中は古い結果を表示しつつ、裏で
+  // 新しい結果を計算する」モードに切り替えると、入力欄のラグが消える。
+  const deferredKeyword = useDeferredValue(keyword);
+  const trimmedKeyword = deferredKeyword.trim().toLowerCase();
 
   const filtered = useMemo(() => {
     return (tasks ?? []).filter((t) => {
-      if (filterMember !== "all" && t.assigneeMemberId !== filterMember) return false;
+      if (filterMember === "unassigned") {
+        if (t.assigneeMemberId != null) return false;
+      } else if (filterMember !== "all") {
+        if (t.assigneeMemberId !== filterMember) return false;
+      }
       if (filterProject !== "all" && t.projectId !== filterProject) return false;
       if (filterDone === "open" && t.done) return false;
       if (filterDone === "done" && !t.done) return false;
@@ -183,7 +272,13 @@ export function TaskBoard() {
   }, [filtered]);
 
   // (projectId, weekIso) ごとに「未完了 → sortOrder → id」「完了は下（done=true）」の順で並べる
-  type WeekBucket = { weekIso: string; open: Task[]; done: Task[] };
+  // openIds は SortableContext.items 用に毎レンダー新規生成しないように bucket 構築時に併せて作る。
+  type WeekBucket = {
+    weekIso: string;
+    open: Task[];
+    done: Task[];
+    openIds: number[];
+  };
   const groupedByWeek = useMemo(() => {
     const m: Record<number, WeekBucket[]> = {};
     for (const projectId of Object.keys(grouped).map(Number)) {
@@ -191,10 +286,15 @@ export function TaskBoard() {
       for (const t of grouped[projectId]) {
         let b = byWeek.get(t.weekIso);
         if (!b) {
-          b = { weekIso: t.weekIso, open: [], done: [] };
+          b = { weekIso: t.weekIso, open: [], done: [], openIds: [] };
           byWeek.set(t.weekIso, b);
         }
-        (t.done ? b.done : b.open).push(t);
+        if (t.done) {
+          b.done.push(t);
+        } else {
+          b.open.push(t);
+          b.openIds.push(t.id);
+        }
       }
       const buckets = [...byWeek.values()].sort((a, b) =>
         a.weekIso.localeCompare(b.weekIso),
@@ -204,11 +304,29 @@ export function TaskBoard() {
     return m;
   }, [grouped]);
 
+  // タスクID → タスク本体のルックアップ。最上位 DndContext の onDragEnd で
+  // active.id だけから projectId/weekIso を引くために使う。
+  const tasksById = useMemo(() => {
+    const m = new Map<number, Task>();
+    for (const t of tasks ?? []) m.set(t.id, t);
+    return m;
+  }, [tasks]);
+  const tasksByIdRef = useRef(tasksById);
+  useEffect(() => {
+    tasksByIdRef.current = tasksById;
+  }, [tasksById]);
+
+  // 担当 / 状態 / キーワードのいずれかでタスク側を絞り込んでいるとき、該当タスクが
+  // 0 件のプロジェクトカードは「空カードがフィルタを素通りして見える」誤解を生むため
+  // 非表示にする。プロジェクトフィルタだけがアクティブな場合は、そのプロジェクトの
+  // カードを意図的に出したい運用なので空でも残す。
+  const hideEmptyProjects =
+    trimmedKeyword !== "" || filterMember !== "all" || filterDone !== "all";
   const visibleProjects = useMemo(() => {
     return (projects ?? [])
       .filter((p) => filterProject === "all" || p.id === filterProject)
-      .filter((p) => !trimmedKeyword || (grouped[p.id]?.length ?? 0) > 0);
-  }, [projects, filterProject, trimmedKeyword, grouped]);
+      .filter((p) => !hideEmptyProjects || (grouped[p.id]?.length ?? 0) > 0);
+  }, [projects, filterProject, hideEmptyProjects, grouped]);
 
   const totalPages = Math.max(1, Math.ceil(visibleProjects.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
@@ -228,12 +346,12 @@ export function TaskBoard() {
 
   // tasksKey の楽観更新ヘルパ。refreshInterval との交錯を避けるため
   // 全ての書込みは mutate({ optimisticData, rollbackOnError, revalidate: false }) で行う。
-  async function commitTaskPatch(
+  const commitTaskPatch = useCallback(async (
     id: number,
     patch: Record<string, unknown>,
     apply: (t: Task) => Task,
     opts: { affectsWorkload: boolean },
-  ) {
+  ) => {
     await mutate<Task[]>(
       tasksKey,
       async (current) => {
@@ -249,9 +367,9 @@ export function TaskBoard() {
       },
     );
     if (opts.affectsWorkload) mutate(workloadKey);
-  }
+  }, [tasksKey, workloadKey]);
 
-  async function toggleDone(t: Task) {
+  const toggleDone = useCallback(async (t: Task) => {
     const newDone = !t.done;
     const oldDone = t.done;
     try {
@@ -282,9 +400,9 @@ export function TaskBoard() {
           { affectsWorkload: false },
         ),
     });
-  }
+  }, [commitTaskPatch, pushHistory]);
 
-  async function updateField(t: Task, patch: Record<string, unknown>) {
+  const updateField = useCallback(async (t: Task, patch: Record<string, unknown>) => {
     // API は `"key" in body` で判定し null=明示NULL, キー欠落=更新しない の分離をしている。
     // 旧値が undefined のキーは oldPatch に含めず、誤って null で上書きしないようにする。
     const oldPatch: Record<string, unknown> = {};
@@ -312,13 +430,13 @@ export function TaskBoard() {
       undo: () =>
         commitTaskPatch(t.id, oldPatch, applyPatch(oldPatch), { affectsWorkload }),
     });
-  }
+  }, [commitTaskPatch, pushHistory]);
 
-  async function remove(t: Task) {
+  const remove = useCallback(async (t: Task) => {
     await del(`/api/tasks/${t.id}`);
     mutate(tasksKey);
     mutate(workloadKey);
-  }
+  }, [tasksKey, workloadKey]);
 
   function applyOptimisticOrder(map: Map<number, number>) {
     return (prev: Task[] = []) =>
@@ -398,7 +516,39 @@ export function TaskBoard() {
     }
   }
 
+  const activeTask =
+    activeId != null ? tasksById.get(activeId) ?? null : null;
+
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={(e: DragStartEvent) => {
+        const id = Number(e.active.id);
+        if (Number.isFinite(id)) setActiveId(id);
+      }}
+      onDragCancel={() => setActiveId(null)}
+      onDragEnd={(e: DragEndEvent) => {
+        setActiveId(null);
+        const { active, over } = e;
+        if (!over) return;
+        const fromId = Number(active.id);
+        const toId = Number(over.id);
+        if (!Number.isFinite(fromId) || !Number.isFinite(toId)) return;
+        if (fromId === toId) return;
+        const fromTask = tasksByIdRef.current.get(fromId);
+        const overTask = tasksByIdRef.current.get(toId);
+        if (!fromTask || !overTask) return;
+        if (fromTask.projectId !== overTask.projectId) return;
+        if (fromTask.weekIso !== overTask.weekIso) return;
+        void reorderInWeekGroup(
+          fromTask.projectId,
+          fromTask.weekIso,
+          fromId,
+          toId,
+        );
+      }}
+    >
     <section className="glass-panel" style={{ padding: 24 }}>
       <header
         style={{
@@ -445,9 +595,12 @@ export function TaskBoard() {
           <select
             className="input"
             value={String(filterMember)}
-            onChange={(e) =>
-              setFilterMember(e.target.value === "all" ? "all" : Number(e.target.value))
-            }
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "all") setFilterMember("all");
+              else if (v === "unassigned") setFilterMember("unassigned");
+              else setFilterMember(Number(v));
+            }}
             style={{ width: 140 }}
           >
             <option value="all">担当: すべて</option>
@@ -456,6 +609,7 @@ export function TaskBoard() {
                 {m.name}
               </option>
             ))}
+            <option value="unassigned">未担当</option>
           </select>
           <select
             className="input"
@@ -489,9 +643,11 @@ export function TaskBoard() {
         <p className="muted">
           プロジェクトがありません。「プロジェクト管理」ページから追加してください。
         </p>
-      ) : trimmedKeyword && filtered.length === 0 ? (
+      ) : hideEmptyProjects && filtered.length === 0 ? (
         <p className="muted">
-          「{keyword.trim()}」に一致するタスクは見つかりませんでした。
+          {trimmedKeyword
+            ? `「${keyword.trim()}」に一致するタスクは見つかりませんでした。`
+            : "条件に一致するタスクはありません。"}
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -507,7 +663,9 @@ export function TaskBoard() {
                     a.id - b.id,
                 );
               const hasOpen = buckets.some((b) => b.open.length > 0);
-              const isCollapsed = trimmedKeyword
+              // 何かしらのタスク絞り込みが効いている間は、開閉トグルを無視して
+              // 強制的に展開する（該当タスクをすぐ見せたい）。
+              const isCollapsed = hideEmptyProjects
                 ? false
                 : !expanded.has(p.id);
               const panelId = `project-panel-${p.id}`;
@@ -518,11 +676,11 @@ export function TaskBoard() {
                     onClick={() => toggleExpanded(p.id)}
                     aria-expanded={!isCollapsed}
                     aria-controls={panelId}
-                    aria-disabled={trimmedKeyword ? true : undefined}
-                    disabled={!!trimmedKeyword}
+                    aria-disabled={hideEmptyProjects ? true : undefined}
+                    disabled={hideEmptyProjects}
                     title={
-                      trimmedKeyword
-                        ? "検索中はすべて展開されます"
+                      hideEmptyProjects
+                        ? "絞り込み中はすべて展開されます"
                         : undefined
                     }
                     style={{
@@ -536,7 +694,7 @@ export function TaskBoard() {
                       background: "transparent",
                       color: "inherit",
                       textAlign: "left",
-                      cursor: trimmedKeyword ? "default" : "pointer",
+                      cursor: hideEmptyProjects ? "default" : "pointer",
                       font: "inherit",
                       opacity: 1,
                     }}
@@ -614,56 +772,28 @@ export function TaskBoard() {
                           >
                             {weekIsoLabel(bucket.weekIso)}
                           </div>
-                          <DndContext
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={(e: DragEndEvent) => {
-                              const { active, over } = e;
-                              if (!over) return;
-                              const fromId = Number(active.id);
-                              const toId = Number(over.id);
-                              if (
-                                !Number.isFinite(fromId) ||
-                                !Number.isFinite(toId)
-                              )
-                                return;
-                              void reorderInWeekGroup(
-                                p.id,
-                                bucket.weekIso,
-                                fromId,
-                                toId,
-                              );
-                            }}
+                          <SortableContext
+                            items={bucket.openIds}
+                            strategy={verticalListSortingStrategy}
                           >
-                            <SortableContext
-                              items={bucket.open.map((t) => t.id)}
-                              strategy={verticalListSortingStrategy}
+                            <ul
+                              className="task-list"
+                              style={taskListStyle}
                             >
-                              <ul
-                                className="task-list"
-                                style={{
-                                  listStyle: "none",
-                                  padding: 0,
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: 2,
-                                }}
-                              >
-                                {bucket.open.map((t) => (
-                                  <SortableTaskRow
-                                    key={t.id}
-                                    task={t}
-                                    isEdit={isEdit}
-                                    members={members ?? []}
-                                    weeks={weeks}
-                                    onToggleDone={toggleDone}
-                                    onUpdate={updateField}
-                                    onRemove={remove}
-                                  />
-                                ))}
-                              </ul>
-                            </SortableContext>
-                          </DndContext>
+                              {bucket.open.map((t) => (
+                                <SortableTaskRow
+                                  key={t.id}
+                                  task={t}
+                                  isEdit={isEdit}
+                                  members={members ?? []}
+                                  weeks={weeks}
+                                  onToggleDone={toggleDone}
+                                  onUpdate={updateField}
+                                  onRemove={remove}
+                                />
+                              ))}
+                            </ul>
+                          </SortableContext>
                         </div>
                       ))}
                       {completedTasks.length > 0 && (
@@ -681,13 +811,7 @@ export function TaskBoard() {
                           </div>
                           <ul
                             className="task-list"
-                            style={{
-                              listStyle: "none",
-                              padding: 0,
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 2,
-                            }}
+                            style={taskListStyle}
                           >
                             {completedTasks.map((t) => (
                               <DoneTaskRow
@@ -752,10 +876,25 @@ export function TaskBoard() {
         </div>
       )}
     </section>
+    <DragOverlay>
+      {activeTask ? (
+        <div style={dragOverlayStyle}>
+          <span style={dragHandleStyle}>⋮⋮</span>
+          <input
+            type="checkbox"
+            className="checkbox"
+            checked={activeTask.done}
+            readOnly
+          />
+          <span style={dragOverlayTitleStyle}>{activeTask.title}</span>
+        </div>
+      ) : null}
+    </DragOverlay>
+    </DndContext>
   );
 }
 
-function TaskRowCells({
+const TaskRowCells = memo(function TaskRowCells({
   task,
   isEdit,
   members,
@@ -845,16 +984,16 @@ function TaskRowCells({
             if (confirm(`「${task.title}」を削除しますか？`)) onRemove(task);
           }}
           title="削除"
-          style={{ fontSize: ".75rem" }}
+          style={removeBtnStyle}
         >
           ×
         </button>
       )}
     </>
   );
-}
+});
 
-function SortableTaskRow({
+const SortableTaskRow = memo(function SortableTaskRow({
   task,
   isEdit,
   members,
@@ -880,20 +1019,21 @@ function SortableTaskRow({
     isDragging,
   } = useSortable({ id: task.id });
 
-  const style: CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: ROW_GRID_TASKBOARD,
-    alignItems: "center",
-    gap: 8,
-    padding: "6px 8px",
-    borderRadius: "var(--r-sm)",
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-    background: isDragging ? "rgba(255,255,255,.42)" : undefined,
-    position: "relative",
-    zIndex: isDragging ? 2 : "auto",
-  };
+  // transform / transition / isDragging が変わったときだけ style オブジェクトを
+  // 再生成する。ドラッグ非対象の行の style 参照は安定し、useSortable で内部の
+  // re-render が起きてもこの style props は変わらないので memo が機能する。
+  const style = useMemo<CSSProperties>(
+    () => ({
+      ...baseRowStyle,
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+      background: isDragging ? "rgba(255,255,255,.42)" : undefined,
+      position: "relative",
+      zIndex: isDragging ? 2 : "auto",
+    }),
+    [transform, transition, isDragging],
+  );
 
   return (
     <li ref={setNodeRef} style={style}>
@@ -904,14 +1044,7 @@ function SortableTaskRow({
         aria-label="この行を並び替え"
         title="ドラッグで並び替え"
         className="btn btn-ghost btn-sm"
-        style={{
-          padding: "2px 2px",
-          fontSize: ".875rem",
-          lineHeight: 1,
-          color: "var(--color-text-light)",
-          cursor: isDragging ? "grabbing" : "grab",
-          touchAction: "none",
-        }}
+        style={isDragging ? dragHandleStyleDragging : dragHandleStyle}
       >
         ⋮⋮
       </button>
@@ -926,9 +1059,9 @@ function SortableTaskRow({
       />
     </li>
   );
-}
+});
 
-function DoneTaskRow({
+const DoneTaskRow = memo(function DoneTaskRow({
   task,
   isEdit,
   members,
@@ -946,27 +1079,11 @@ function DoneTaskRow({
   onRemove: (t: Task) => void;
 }) {
   return (
-    <li
-      style={{
-        display: "grid",
-        gridTemplateColumns: ROW_GRID_TASKBOARD,
-        alignItems: "center",
-        gap: 8,
-        padding: "6px 8px",
-        borderRadius: "var(--r-sm)",
-        opacity: 0.55,
-      }}
-    >
+    <li style={doneRowStyle}>
       <span
         aria-hidden="true"
         title="完了タスクは並び替えできません"
-        style={{
-          fontSize: ".875rem",
-          lineHeight: 1,
-          color: "var(--color-text-light)",
-          textAlign: "center",
-          cursor: "not-allowed",
-        }}
+        style={doneRowHandleStyle}
       >
         ⋮⋮
       </span>
@@ -982,7 +1099,7 @@ function DoneTaskRow({
       />
     </li>
   );
-}
+});
 
 function HoursCell({
   value,

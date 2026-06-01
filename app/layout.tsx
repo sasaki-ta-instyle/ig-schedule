@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
+import { SWRProvider } from "@/lib/swr-config";
 
 // 本番 (ConoHa) は basePath 込みの絶対 URL。Vercel preview では basePath を使わないので、
 // その場合は VERCEL_URL から base を組み立て、OGP / 相対リンクの解決を Vercel ドメイン基準にする (N-3)。
@@ -45,9 +46,10 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <head>
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
         <link
           rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/gen-interface-jp@0.1.2/all.css"
+          href="https://cdn.jsdelivr.net/npm/gen-interface-jp@0.5.0/all.css"
         />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -58,7 +60,9 @@ export default function RootLayout({
       </head>
       <body>
         <div className="scene-bg" aria-hidden="true" />
-        <AppShell>{children}</AppShell>
+        <SWRProvider>
+          <AppShell>{children}</AppShell>
+        </SWRProvider>
       </body>
     </html>
   );

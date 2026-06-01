@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
 
@@ -20,7 +20,6 @@ type RecurringTask = {
 };
 
 const RECURRING_KEY = "/api/recurring-tasks?archived=1";
-const REFRESH_MS = 5000;
 const PAGE_SIZE_STORAGE_KEY = "ig-schedule:recurring-page-size";
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
@@ -33,9 +32,7 @@ export function RecurringList() {
   const [filterMember, setFilterMember] = useState<number | "all" | "unassigned">("all");
 
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
-  const { data: items } = useSWR<RecurringTask[]>(RECURRING_KEY, fetcher, {
-    refreshInterval: REFRESH_MS,
-  });
+  const { data: items } = useSWR<RecurringTask[]>(RECURRING_KEY, fetcher);
 
   const memberById = useMemo(() => {
     const m: Record<number, Member> = {};
@@ -43,7 +40,8 @@ export function RecurringList() {
     return m;
   }, [members]);
 
-  const trimmedKeyword = keyword.trim().toLowerCase();
+  const deferredKeyword = useDeferredValue(keyword);
+  const trimmedKeyword = deferredKeyword.trim().toLowerCase();
 
   const visible = useMemo(() => {
     const list = items ?? [];
