@@ -338,12 +338,14 @@ summary:focus-visible,
   top: calc(100% + 4px);
   right: 0;
   min-width: 180px;
-  background: var(--glass-light);
-  backdrop-filter: var(--glass-blur-sm);
-  -webkit-backdrop-filter: var(--glass-blur-sm);
+  /* 「操作の選択肢」を出すポップアップなので可読性優先で不透明度を上げる。
+     Nav active と同じ「明るい白」路線に揃え、glass-hl で浮遊感を補強。 */
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border-l);
   border-radius: var(--r-sm);
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--glass-hl), var(--glass-shadow);
   padding: var(--space-1);
   z-index: 5;
   display: flex;
@@ -372,6 +374,24 @@ summary:focus-visible,
 }
 .action-menu-list .menu-item--destructive:hover:not(:disabled) {
   background: rgba(220, 38, 38, 0.12);
+}
+/* ActionMenu open 中はツールチップ等の外部 UI を隠して、メニューと重ならないようにする */
+body.action-menu-open [role="tooltip"] {
+  display: none !important;
+}
+
+/* Dashboard セル内（タスクリスト）の ActionMenu は行密度に合わせて縮める */
+.cell-task-list .action-menu > summary {
+  padding: 0 4px;
+  font-size: .75rem;
+  line-height: 1.2;
+}
+.cell-task-list .action-menu-list {
+  min-width: 140px;
+}
+.cell-task-list .action-menu-list button {
+  padding: var(--space-1) var(--space-2);
+  font-size: .75rem;
 }
 
 /* ── Modal overflow trap 対策 (reviewer M1) ──

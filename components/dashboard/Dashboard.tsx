@@ -22,6 +22,7 @@ import { holidaysInWeek } from "@/lib/holidays";
 import { WORK_RULES } from "@/lib/work-rules";
 import { fetcher, postJson } from "@/lib/api";
 import { SWR_REFRESH_MS } from "@/lib/swr-config";
+import { ActionMenu } from "@/components/common/ActionMenu";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import { useTaskHistory } from "@/hooks/useTaskHistory";
@@ -102,6 +103,14 @@ export function Dashboard({ archived = false }: { archived?: boolean } = {}) {
   const TOOLTIP_MAX_W = 320;
   const showTooltip = useCallback((rect: DOMRect, label: string) => {
     if (!label) return;
+    // ActionMenu (︙) が開いている間は tooltip を出さない。
+    // 両者とも行の周辺に表示されるため、重なって読みにくくなるのを防ぐ。
+    if (
+      typeof document !== "undefined" &&
+      document.querySelector(".action-menu[open]")
+    ) {
+      return;
+    }
     const margin = 8;
     const x = Math.min(
       rect.left,
@@ -1000,18 +1009,6 @@ const RecurringRow = memo(function RecurringRow({
   );
 });
 
-const moveBtnStyle: CSSProperties = {
-  fontSize: ".625rem",
-  lineHeight: 1,
-  padding: "2px 4px",
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
-  color: "var(--color-text-muted)",
-  minWidth: 16,
-  textAlign: "center",
-};
-
 const taskRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "flex-start",
@@ -1027,14 +1024,6 @@ const taskRowDotStyle: CSSProperties = {
   borderRadius: 999,
   marginRight: 5,
   verticalAlign: "middle",
-};
-
-const taskRowMoveColStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 1,
-  flexShrink: 0,
 };
 
 const TaskRow = memo(function TaskRow({
@@ -1125,47 +1114,47 @@ const TaskRow = memo(function TaskRow({
         </span>
       </div>
       {isEdit && (onMoveUp || onMoveDown || onShiftPrev || onShiftNext) && (
-        <div className="edit-only" style={taskRowMoveColStyle}>
-          <button
-            type="button"
-            onClick={handleMoveUp}
-            disabled={!canMoveUp}
-            title="上へ"
-            style={moveBtnStyle}
-          >
-            ↑
-          </button>
-          <div style={{ display: "flex", gap: 0 }}>
+        <div className="edit-only" style={{ flexShrink: 0 }}>
+          <ActionMenu label="このタスクのアクション">
+            {onMoveUp && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleMoveUp}
+                disabled={!canMoveUp}
+              >
+                ↑ 上へ
+              </button>
+            )}
+            {onMoveDown && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleMoveDown}
+                disabled={!canMoveDown}
+              >
+                ↓ 下へ
+              </button>
+            )}
             {onShiftPrev && (
               <button
                 type="button"
+                role="menuitem"
                 onClick={handleShiftPrev}
-                title="前週へ戻す"
-                style={moveBtnStyle}
               >
-                ←
+                ← 前週へ戻す
               </button>
             )}
             {onShiftNext && (
               <button
                 type="button"
+                role="menuitem"
                 onClick={handleShiftNext}
-                title="翌週へ移動"
-                style={moveBtnStyle}
               >
-                →
+                → 翌週へ移動
               </button>
             )}
-          </div>
-          <button
-            type="button"
-            onClick={handleMoveDown}
-            disabled={!canMoveDown}
-            title="下へ"
-            style={moveBtnStyle}
-          >
-            ↓
-          </button>
+          </ActionMenu>
         </div>
       )}
     </li>

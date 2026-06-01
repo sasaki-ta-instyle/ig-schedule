@@ -41,11 +41,22 @@ export function ActionMenu({
         if (summary instanceof HTMLElement) summary.focus();
       }
     }
+    // open 中は body に class を付与。Dashboard の tooltip など、
+    // メニューと重なって読みにくい外部 UI を CSS で隠すための signal。
+    function onToggle() {
+      if (!el) return;
+      if (el.open) document.body.classList.add("action-menu-open");
+      else document.body.classList.remove("action-menu-open");
+    }
     document.addEventListener("click", onDocClick);
     document.addEventListener("keydown", onKey);
+    el.addEventListener("toggle", onToggle);
     return () => {
       document.removeEventListener("click", onDocClick);
       document.removeEventListener("keydown", onKey);
+      el.removeEventListener("toggle", onToggle);
+      // unmount 時に取り残された class を掃除
+      document.body.classList.remove("action-menu-open");
     };
   }, []);
 
@@ -55,6 +66,13 @@ export function ActionMenu({
         className="btn btn-ghost btn-sm action-menu-trigger"
         aria-label={label}
         title={label}
+        // toggle イベントは数フレーム遅れるため、ポインタが触れた瞬間に
+        // body class を先回りで付与してツールチップ等を即時に隠す。
+        onPointerDown={() => {
+          if (ref.current && !ref.current.open) {
+            document.body.classList.add("action-menu-open");
+          }
+        }}
       >
         <span aria-hidden="true">︙</span>
       </summary>
