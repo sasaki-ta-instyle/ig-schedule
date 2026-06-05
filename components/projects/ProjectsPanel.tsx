@@ -831,21 +831,32 @@ export function ProjectsPanel() {
     setExpanded(new Set([id]));
 
     // 4. スクロール + 灯り。
-    // SP は描画が遅く、render 完了前にスクロールしても target が存在せず
-    // 何も起きない。最大 1 秒、50ms 間隔でポーリングして target が DOM に
-    // 出現したら instant スクロールする。さらに 400ms 後にもう 1 回スクロール
-    // して async 描画後のレイアウトズレも補正する。
+    // iOS Safari は scrollIntoView がレイアウト確定や sticky header と
+    // 競合して効かないことがあるため、window.scrollTo で明示的に Y 座標
+    // 計算してジャンプする。target 要素が DOM に現れるまで 50ms × 20 回
+    // ポーリング。出現後は 0ms / 300ms / 800ms の 3 段スクロールで、
+    // タスクリストなどの async 描画後のレイアウトズレも補正する。
+    const HEADER_OFFSET = 90; // AppShell sticky header 想定の offset
+    const performScroll = (): HTMLElement | null => {
+      const el = document.getElementById(`project-${id}`);
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      const y = window.scrollY + rect.top - HEADER_OFFSET;
+      window.scrollTo({ top: Math.max(0, y), behavior: "auto" });
+      return el;
+    };
+
     let scrolled = false;
     let tries = 0;
     const MAX_TRIES = 20; // 20 * 50ms = 最大 1000ms 待つ
     let highlightTimer: ReturnType<typeof setTimeout> | null = null;
-    let recheckTimer: ReturnType<typeof setTimeout> | null = null;
+    let recheck1: ReturnType<typeof setTimeout> | null = null;
+    let recheck2: ReturnType<typeof setTimeout> | null = null;
     const poll = setInterval(() => {
-      const el = document.getElementById(`project-${id}`);
+      const el = performScroll();
       if (el && !scrolled) {
         scrolled = true;
         clearInterval(poll);
-        el.scrollIntoView({ behavior: "auto", block: "start" });
         el.dataset.justOpened = "true";
         setLiveMessage(`${targetProject.name} に移動しました`);
         highlightTimer = setTimeout(() => {
@@ -853,12 +864,9 @@ export function ProjectsPanel() {
         }, 1500);
         (window as unknown as { __projectsArrivalTimer?: number }).__projectsArrivalTimer =
           highlightTimer as unknown as number;
-        // 後発の async 描画が走るとレイアウトが伸びて着地がズレるので、
-        // 400ms 後に再スクロールして補正。
-        recheckTimer = setTimeout(() => {
-          const el2 = document.getElementById(`project-${id}`);
-          el2?.scrollIntoView({ behavior: "auto", block: "start" });
-        }, 400);
+        // 後発レイアウト変化を 2 回追従補正
+        recheck1 = setTimeout(performScroll, 300);
+        recheck2 = setTimeout(performScroll, 800);
       } else if (++tries >= MAX_TRIES) {
         clearInterval(poll);
       }
@@ -876,7 +884,8 @@ export function ProjectsPanel() {
     return () => {
       clearInterval(poll);
       if (highlightTimer) clearTimeout(highlightTimer);
-      if (recheckTimer) clearTimeout(recheckTimer);
+      if (recheck1) clearTimeout(recheck1);
+      if (recheck2) clearTimeout(recheck2);
     };
   }, [openParam, projects, expandedHydrated, pageSize]);
 
