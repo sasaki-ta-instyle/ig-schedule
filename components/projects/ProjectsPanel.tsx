@@ -840,13 +840,23 @@ export function ProjectsPanel() {
     const performScroll = (): HTMLElement | null => {
       const el = document.getElementById(`project-${id}`);
       if (!el) return null;
-      // iOS Safari は API ごとに挙動が違うため、安全のため三重叩きで確実に
-      // スクロール位置を反映させる。
       const rect = el.getBoundingClientRect();
       const y = Math.max(0, window.scrollY + rect.top - HEADER_OFFSET);
-      window.scrollTo({ top: y, behavior: "auto" });
-      if (document.documentElement) document.documentElement.scrollTop = y;
+      // globals.css で html { scroll-behavior: smooth } が指定されているため、
+      // window.scrollTo({behavior:'auto'}) でも smooth が効いてしまい、
+      // 3 段スクロールが互いに割り込み合って中途半端な位置で止まる。
+      // 一時的に scroll-behavior を auto に上書きしてから scrollTop 直接代入
+      // （CSS をバイパスして必ず instant）で確実にジャンプし、次フレームで
+      // smooth に戻す。
+      const html = document.documentElement;
+      const prev = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, y);
+      html.scrollTop = y;
       if (document.body) document.body.scrollTop = y;
+      requestAnimationFrame(() => {
+        html.style.scrollBehavior = prev;
+      });
       return el;
     };
 
