@@ -11,7 +11,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -246,7 +246,6 @@ function migrateExpandedKeys(): Set<number> {
 // Main component
 // ──────────────────────────────────────────────
 export function ProjectsPanel() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { isEdit, currentMemberId } = useEditMode();
 
@@ -791,18 +790,21 @@ export function ProjectsPanel() {
 
   // ── ?open=<id> ジャンプフロー ──
   const openParam = searchParams?.get("open") ?? null;
-  const hasJumpedRef = useRef(false);
+  // 「最後に処理した id」を覚えておくと、同じ session で別タスクをクリック
+  // して別 id でジャンプし直したいケースに対応できる。boolean フラグだと
+  // 1 回限りで、2 回目以降が無反応に見えてしまう。
+  const lastJumpedIdRef = useRef<number | null>(null);
   useEffect(() => {
     if (!openParam) return;
-    if (hasJumpedRef.current) return;
     if (!projects || projects.length === 0) return;
     if (!expandedHydrated) return;
     const id = Number(openParam);
     if (!Number.isFinite(id)) return;
+    if (lastJumpedIdRef.current === id) return;
     const targetProject = projects.find((p) => p.id === id);
     if (!targetProject) return;
 
-    hasJumpedRef.current = true;
+    lastJumpedIdRef.current = id;
 
     // 1. フィルタを all にリセット
     setFilterMember("all");
@@ -818,33 +820,38 @@ export function ProjectsPanel() {
     setExpanded(new Set([id]));
 
     // 4. スクロール + 灯り。
-    // SP は描画が遅く、smooth スクロールはアニメ開始時点の y を目標に固定する
-    // ため、その後の遅延レイアウト（タスクリストの非同期描画など）で着地が
-    // ずれる。instant スクロールに変えて、rAF×2 でレイアウト確定を待ち、
-    // さらに 400ms 後にもう 1 回スクロールして async 描画後のズレも補正する。
-    const scrollToTarget = (): HTMLElement | null => {
+    // SP は描画が遅く、render 完了前にスクロールしても target が存在せず
+    // 何も起きない。最大 1 秒、50ms 間隔でポーリングして target が DOM に
+    // 出現したら instant スクロールする。さらに 400ms 後にもう 1 回スクロール
+    // して async 描画後のレイアウトズレも補正する。
+    let scrolled = false;
+    let tries = 0;
+    const MAX_TRIES = 20; // 20 * 50ms = 最大 1000ms 待つ
+    let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+    let recheckTimer: ReturnType<typeof setTimeout> | null = null;
+    const poll = setInterval(() => {
       const el = document.getElementById(`project-${id}`);
-      if (!el) return null;
-      el.scrollIntoView({ behavior: "auto", block: "start" });
-      return el;
-    };
-
-    const t1 = setTimeout(() => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const el = scrollToTarget();
-          if (!el) return;
-          el.dataset.justOpened = "true";
-          setLiveMessage(`${targetProject.name} に移動しました`);
-          const t2 = setTimeout(() => {
-            delete el.dataset.justOpened;
-          }, 1500);
-          (window as unknown as { __projectsArrivalTimer?: number }).__projectsArrivalTimer =
-            t2 as unknown as number;
-        });
-      });
-    }, 60);
-    const t3 = setTimeout(scrollToTarget, 400);
+      if (el && !scrolled) {
+        scrolled = true;
+        clearInterval(poll);
+        el.scrollIntoView({ behavior: "auto", block: "start" });
+        el.dataset.justOpened = "true";
+        setLiveMessage(`${targetProject.name} に移動しました`);
+        highlightTimer = setTimeout(() => {
+          delete el.dataset.justOpened;
+        }, 1500);
+        (window as unknown as { __projectsArrivalTimer?: number }).__projectsArrivalTimer =
+          highlightTimer as unknown as number;
+        // 後発の async 描画が走るとレイアウトが伸びて着地がズレるので、
+        // 400ms 後に再スクロールして補正。
+        recheckTimer = setTimeout(() => {
+          const el2 = document.getElementById(`project-${id}`);
+          el2?.scrollIntoView({ behavior: "auto", block: "start" });
+        }, 400);
+      } else if (++tries >= MAX_TRIES) {
+        clearInterval(poll);
+      }
+    }, 50);
 
     // 5. URL から ?open / ?from を消費（hash は維持）
     // router.replace は basePath を自動前置するため、すでに basePath を含む
@@ -856,10 +863,11 @@ export function ProjectsPanel() {
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t3);
+      clearInterval(poll);
+      if (highlightTimer) clearTimeout(highlightTimer);
+      if (recheckTimer) clearTimeout(recheckTimer);
     };
-  }, [openParam, projects, expandedHydrated, pageSize, router]);
+  }, [openParam, projects, expandedHydrated, pageSize]);
 
   // ── DnD active info ──
   const activeTask =
