@@ -1616,18 +1616,13 @@ function ProjectCard({
               {showMetaSection && (
                 <div>
                   <div
-                    style={{
-                      padding: "var(--space-1) var(--space-2)",
-                      color: "var(--color-text-muted)",
-                      fontSize: ".75rem",
-                      letterSpacing: ".04em",
-                    }}
+                    className="eyebrow"
+                    style={{ marginBottom: "var(--space-2)" }}
                   >
                     概要・メモ
                   </div>
                   <div
                     style={{
-                      marginTop: "var(--space-2)",
                       display: "flex",
                       flexDirection: "column",
                       gap: "var(--space-2)",
