@@ -1438,69 +1438,81 @@ function ProjectCard({
           }}
         >
           <span
-            aria-hidden="true"
+            className="project-title-group"
             style={{
-              display: "inline-flex",
-              width: 28,
-              height: 28,
+              display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              color: "var(--color-text-muted)",
-              fontSize: "1.5rem",
-              lineHeight: 1,
-              transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-              transition: "transform var(--ease-out)",
-              flexShrink: 0,
+              gap: "var(--space-2)",
+              flex: "1 1 auto",
+              minWidth: 0,
+              overflow: "hidden",
             }}
           >
-            ▾
-          </span>
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 999,
-              background: p.color,
-              flexShrink: 0,
-            }}
-          />
-          {p.isPrivate && (
             <span
-              aria-label="非公開プロジェクト"
-              title="非公開プロジェクト"
+              aria-hidden="true"
               style={{
-                fontSize: ".875rem",
+                display: "inline-flex",
+                width: 28,
+                height: 28,
+                alignItems: "center",
+                justifyContent: "center",
                 color: "var(--color-text-muted)",
+                fontSize: "1.5rem",
+                lineHeight: 1,
+                transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                transition: "transform var(--ease-out)",
                 flexShrink: 0,
               }}
             >
-              🔒
+              ▾
             </span>
-          )}
-          {isEdit ? (
-            <input
-              className="input editable-only project-name"
-              defaultValue={p.name}
-              onBlur={(e) => {
-                const v = e.currentTarget.value.trim();
-                if (v && v !== p.name) onUpdate({ name: v });
-              }}
-              onClick={(e) => e.stopPropagation()}
-              style={{ flex: 1, minWidth: 0, fontSize: "1rem", fontWeight: 600 }}
-            />
-          ) : (
-            <strong
-              className="t-h4 project-name"
+            <span
               style={{
-                fontSize: "1rem",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                width: 10,
+                height: 10,
+                borderRadius: 999,
+                background: p.color,
+                flexShrink: 0,
               }}
-            >
-              {p.name}
-            </strong>
-          )}
+            />
+            {p.isPrivate && (
+              <span
+                aria-label="非公開プロジェクト"
+                title="非公開プロジェクト"
+                style={{
+                  fontSize: ".875rem",
+                  color: "var(--color-text-muted)",
+                  flexShrink: 0,
+                }}
+              >
+                🔒
+              </span>
+            )}
+            {isEdit ? (
+              <input
+                className="input editable-only project-name"
+                defaultValue={p.name}
+                onBlur={(e) => {
+                  const v = e.currentTarget.value.trim();
+                  if (v && v !== p.name) onUpdate({ name: v });
+                }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ flex: 1, minWidth: 0, fontSize: "1rem", fontWeight: 600 }}
+              />
+            ) : (
+              <strong
+                className="t-h4 project-name"
+                style={{
+                  fontSize: "1rem",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {p.name}
+              </strong>
+            )}
+          </span>
           {p.company && <CompanyChip company={p.company} size="sm" />}
           {isEdit ? (
             <input

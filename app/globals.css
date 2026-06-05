@@ -1164,17 +1164,21 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
     justify-content: flex-start;
   }
 
-  /* ── プロジェクトヘッダ: SP は名前を独立行に ──
-     PC では一行で ▾ + dot + name + chip + 期日 + count が並ぶが、SP では
-     name の幅が足りず ... 省略になっていた。SP のみ button 内で折り返し、
-     name は flex-basis: 100% で自分の行に落とす。 */
+  /* ── プロジェクトヘッダ: SP は ▾ + ● + 名前 を独立行に ──
+     PC では一行で ▾ + ● + name + chip + 期日 + count が並ぶが、SP では
+     name 幅が足りず ... 省略になっていた。SP のみ button 内で折り返し、
+     title group（▾ + ● + 🔒 + name）を flex-basis: 100% で独立行に落とし、
+     name は white-space: normal で全文表示する。 */
   .project-card-header .project-header-btn {
     flex-wrap: wrap;
     row-gap: 4px;
     overflow: visible;
   }
-  .project-card-header .project-name {
+  .project-card-header .project-title-group {
     flex-basis: 100%;
+    overflow: visible !important;
+  }
+  .project-card-header .project-name {
     white-space: normal !important;
     overflow: visible !important;
     text-overflow: clip !important;
