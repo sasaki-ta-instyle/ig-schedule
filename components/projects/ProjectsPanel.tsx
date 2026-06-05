@@ -1434,7 +1434,7 @@ function ProjectCard({
             textAlign: "left",
             cursor: "pointer",
             font: "inherit",
-            padding: "var(--space-1) var(--space-2)",
+            padding: "var(--space-1) var(--space-2) var(--space-1) 0",
           }}
         >
           <span
