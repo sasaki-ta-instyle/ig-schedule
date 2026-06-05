@@ -1424,9 +1424,7 @@ function ProjectCard({
             display: "flex",
             alignItems: "center",
             gap: "var(--space-2)",
-            flex: "1 1 240px",
             minWidth: 0,
-            overflow: "hidden",
             border: 0,
             borderRadius: "var(--r-sm)",
             background: "transparent",
@@ -1443,9 +1441,7 @@ function ProjectCard({
               display: "flex",
               alignItems: "center",
               gap: "var(--space-2)",
-              flex: "1 1 auto",
               minWidth: 0,
-              overflow: "hidden",
             }}
           >
             <span

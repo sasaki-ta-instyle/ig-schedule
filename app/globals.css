@@ -321,6 +321,29 @@ summary:focus-visible,
   background: rgba(255, 255, 255, 0.42);
 }
 
+/* ── プロジェクトヘッダ: ▾ + ● + 名前 / メタ / 担当チップ の 3 行レイアウト ──
+   ・ row 1: title group（▾ + ● + 🔒 + プロジェクト名）
+   ・ row 2: CompanyChip + 期日 + (件数)
+   ・ row 3: 担当チップ集約（山田 / 柏木 / …）
+   どのビューポートでも同じ縦並びで読みやすさ優先。長いプロジェクト名は
+   全文表示。button は flex-basis: 100% で 1 行を独占し、担当チップは
+   自動で次の outer row に落ちる。 */
+.project-card-header .project-header-btn {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  overflow: visible;
+}
+.project-card-header .project-title-group {
+  flex-basis: 100%;
+  overflow: visible !important;
+}
+.project-card-header .project-name {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
 /* ── ProjectsPanel: 統合カードの展開時演出 ──
    AdminPanel + TaskBoard を統合した /projects 用のスタイル。
    展開コンテナは glass を弱めて「紙」のトーンに降ろす。 */
@@ -1162,26 +1185,6 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   .tabs {
     flex-wrap: wrap;
     justify-content: flex-start;
-  }
-
-  /* ── プロジェクトヘッダ: SP は ▾ + ● + 名前 を独立行に ──
-     PC では一行で ▾ + ● + name + chip + 期日 + count が並ぶが、SP では
-     name 幅が足りず ... 省略になっていた。SP のみ button 内で折り返し、
-     title group（▾ + ● + 🔒 + name）を flex-basis: 100% で独立行に落とし、
-     name は white-space: normal で全文表示する。 */
-  .project-card-header .project-header-btn {
-    flex-wrap: wrap;
-    row-gap: 4px;
-    overflow: visible;
-  }
-  .project-card-header .project-title-group {
-    flex-basis: 100%;
-    overflow: visible !important;
-  }
-  .project-card-header .project-name {
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
   }
 
   /* ── 4-1. iOS auto-zoom 防止 + 最小タップ領域 ──
