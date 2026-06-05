@@ -1441,12 +1441,12 @@ function ProjectCard({
             aria-hidden="true"
             style={{
               display: "inline-flex",
-              width: 20,
-              height: 20,
+              width: 28,
+              height: 28,
               alignItems: "center",
               justifyContent: "center",
               color: "var(--color-text-muted)",
-              fontSize: "1rem",
+              fontSize: "1.5rem",
               lineHeight: 1,
               transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)",
               transition: "transform var(--ease-out)",
@@ -1565,16 +1565,6 @@ function ProjectCard({
           )}
         </div>
 
-        <span
-          onClick={onToggleExpanded}
-          style={{
-            fontSize: ".75rem",
-            color: "var(--color-text-muted)",
-            cursor: "pointer",
-          }}
-        >
-          {isExpanded ? "閉じる ▴" : "開く ▾"}
-        </span>
 
         {isEdit && (
           <ActionMenu label="その他のアクション">

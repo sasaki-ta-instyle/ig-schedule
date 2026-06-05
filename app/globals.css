@@ -1091,10 +1091,10 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 52px;
+    min-height: 52px;
     padding: 0 var(--space-2);
-    font-size: 1.125rem;
+    font-size: 1.5rem;
     line-height: 1;
     flex-shrink: 0;
   }
