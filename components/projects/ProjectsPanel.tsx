@@ -840,9 +840,13 @@ export function ProjectsPanel() {
     const performScroll = (): HTMLElement | null => {
       const el = document.getElementById(`project-${id}`);
       if (!el) return null;
+      // iOS Safari は API ごとに挙動が違うため、安全のため三重叩きで確実に
+      // スクロール位置を反映させる。
       const rect = el.getBoundingClientRect();
-      const y = window.scrollY + rect.top - HEADER_OFFSET;
-      window.scrollTo({ top: Math.max(0, y), behavior: "auto" });
+      const y = Math.max(0, window.scrollY + rect.top - HEADER_OFFSET);
+      window.scrollTo({ top: y, behavior: "auto" });
+      if (document.documentElement) document.documentElement.scrollTop = y;
+      if (document.body) document.body.scrollTop = y;
       return el;
     };
 

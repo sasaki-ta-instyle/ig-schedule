@@ -1148,7 +1148,8 @@ const TaskRow = memo(function TaskRow({
           // プレビューモードではタスクタイトルから /projects へジャンプ。
           // 編集モードでは既存の input 編集を維持するため Link 化しない。
           <Link
-            href={`/projects?open=${project.id}#project-${project.id}`}
+            href={`/projects?open=${project.id}`}
+            scroll={false}
             className="dashboard-task-link"
             style={{
               textDecoration: task.done ? "line-through" : "none",
