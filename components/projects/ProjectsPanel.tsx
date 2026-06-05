@@ -83,7 +83,6 @@ const RANGE = 12;
 // 統合後の新キー。旧 `ig-schedule:project-expanded` (TaskBoard) と
 // `ig-schedule:admin-project-expanded` (AdminPanel) の和集合をここに書き、旧キーは削除する。
 const EXPANDED_STORAGE_KEY = "ig-schedule:projects-expanded";
-const META_EXPANDED_STORAGE_KEY = "ig-schedule:projects-meta-expanded";
 const PAGE_SIZE_STORAGE_KEY = "ig-schedule:projects-page-size";
 
 // 旧キー（マイグレーションで吸い上げてから削除する）
@@ -275,9 +274,6 @@ export function ProjectsPanel() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [expandedHydrated, setExpandedHydrated] = useState(false);
 
-  // 概要・メモのサブトグル（プロジェクトごと）
-  const [metaExpanded, setMetaExpanded] = useState<Set<number>>(new Set());
-
   // 完了済みセクション
   const [completedExpanded, setCompletedExpanded] = useState<Set<number>>(
     new Set(),
@@ -330,18 +326,6 @@ export function ProjectsPanel() {
     setExpandedHydrated(true);
 
     try {
-      const raw = localStorage.getItem(META_EXPANDED_STORAGE_KEY);
-      if (raw) {
-        const arr = JSON.parse(raw) as unknown;
-        if (Array.isArray(arr)) {
-          setMetaExpanded(
-            new Set(arr.filter((v): v is number => typeof v === "number")),
-          );
-        }
-      }
-    } catch {}
-
-    try {
       const raw = localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
       if (raw) {
         const n = Number(raw);
@@ -359,15 +343,6 @@ export function ProjectsPanel() {
       localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify([...expanded]));
     } catch {}
   }, [expanded, expandedHydrated]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        META_EXPANDED_STORAGE_KEY,
-        JSON.stringify([...metaExpanded]),
-      );
-    } catch {}
-  }, [metaExpanded]);
 
   useEffect(() => {
     if (!pageSizeHydrated) return;
@@ -813,14 +788,6 @@ export function ProjectsPanel() {
       return next;
     });
   }
-  function toggleMetaExpanded(projectId: number) {
-    setMetaExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectId)) next.delete(projectId);
-      else next.add(projectId);
-      return next;
-    });
-  }
 
   // ── ?open=<id> ジャンプフロー ──
   const openParam = searchParams?.get("open") ?? null;
@@ -1137,7 +1104,6 @@ export function ProjectsPanel() {
                 );
               const hasOpen = buckets.some((b) => b.open.length > 0);
               const isExpanded = expanded.has(p.id);
-              const isMetaExpanded = metaExpanded.has(p.id);
               const isCompletedExpanded = completedExpanded.has(p.id);
               const panelId = `project-panel-${p.id}`;
               const doneCount = list.filter((t) => t.done).length;
@@ -1152,7 +1118,6 @@ export function ProjectsPanel() {
                   isEdit={isEdit}
                   selected={selected}
                   isExpanded={isExpanded}
-                  isMetaExpanded={isMetaExpanded}
                   isCompletedExpanded={isCompletedExpanded}
                   panelId={panelId}
                   doneCount={doneCount}
@@ -1163,7 +1128,6 @@ export function ProjectsPanel() {
                   weeks={weeks}
                   activeTask={activeTask}
                   onToggleExpanded={() => toggleExpanded(p.id)}
-                  onToggleMetaExpanded={() => toggleMetaExpanded(p.id)}
                   onToggleCompletedExpanded={() =>
                     toggleCompletedExpanded(p.id)
                   }
@@ -1312,7 +1276,6 @@ function ProjectCard({
   isEdit,
   selected,
   isExpanded,
-  isMetaExpanded,
   isCompletedExpanded,
   panelId,
   doneCount,
@@ -1323,7 +1286,6 @@ function ProjectCard({
   weeks,
   activeTask,
   onToggleExpanded,
-  onToggleMetaExpanded,
   onToggleCompletedExpanded,
   onToggleSelected,
   onUpdate,
@@ -1342,7 +1304,6 @@ function ProjectCard({
   isEdit: boolean;
   selected: boolean;
   isExpanded: boolean;
-  isMetaExpanded: boolean;
   isCompletedExpanded: boolean;
   panelId: string;
   doneCount: number;
@@ -1358,7 +1319,6 @@ function ProjectCard({
   weeks: string[];
   activeTask: Task | null;
   onToggleExpanded: () => void;
-  onToggleMetaExpanded: () => void;
   onToggleCompletedExpanded: () => void;
   onToggleSelected: () => void;
   onUpdate: (patch: Partial<Project>) => void | Promise<void>;
@@ -1404,16 +1364,6 @@ function ProjectCard({
           minHeight: 44,
         }}
       >
-        {isEdit && (
-          <input
-            type="checkbox"
-            className="checkbox"
-            checked={selected}
-            onChange={onToggleSelected}
-            title="一括操作の対象に追加"
-            aria-label={`${p.name} を選択`}
-          />
-        )}
         <button
           type="button"
           onClick={onToggleExpanded}
@@ -1444,6 +1394,18 @@ function ProjectCard({
               minWidth: 0,
             }}
           >
+            {isEdit && (
+              <input
+                type="checkbox"
+                className="checkbox"
+                checked={selected}
+                onChange={onToggleSelected}
+                onClick={(e) => e.stopPropagation()}
+                title="一括操作の対象に追加"
+                aria-label={`${p.name} を選択`}
+                style={{ flexShrink: 0 }}
+              />
+            )}
             <span
               aria-hidden="true"
               style={{
@@ -1498,12 +1460,7 @@ function ProjectCard({
             ) : (
               <strong
                 className="t-h4 project-name"
-                style={{
-                  fontSize: "1rem",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
+                style={{ fontSize: "1rem" }}
               >
                 {p.name}
               </strong>
@@ -1534,7 +1491,15 @@ function ProjectCard({
 
         {/* 担当チップ集約（ヘッダ右端） */}
         <div
+          role="button"
+          tabIndex={0}
           onClick={onToggleExpanded}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onToggleExpanded();
+            }
+          }}
           style={{
             display: "flex",
             gap: 4,
