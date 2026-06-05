@@ -490,7 +490,16 @@ export function ProjectsPanel() {
   const totalPages = Math.max(1, Math.ceil(filteredProjects.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
 
+  // ジャンプ処理（?open=<id>）の中で filter を all にリセットすると、
+  // 下の page-reset effect が走って setPage(N) が setPage(1) に上書きされ、
+  // target プロジェクトが page 1 にいない場合は DOM に出現せずスクロール
+  // できなくなる。ジャンプ中は 1 回だけスキップする。
+  const skipNextPageResetRef = useRef(false);
   useEffect(() => {
+    if (skipNextPageResetRef.current) {
+      skipNextPageResetRef.current = false;
+      return;
+    }
     setPage(1);
   }, [filterMember, filterDone, trimmedKeyword, pageSize]);
 
@@ -806,7 +815,9 @@ export function ProjectsPanel() {
 
     lastJumpedIdRef.current = id;
 
-    // 1. フィルタを all にリセット
+    // 1. フィルタを all にリセット。
+    // 直後に page-reset effect が走るが、ジャンプ専用に 1 回スキップする。
+    skipNextPageResetRef.current = true;
     setFilterMember("all");
     setFilterDone("all");
     setKeyword("");
