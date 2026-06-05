@@ -22,6 +22,7 @@ import { holidaysInWeek } from "@/lib/holidays";
 import { WORK_RULES } from "@/lib/work-rules";
 import { fetcher, postJson } from "@/lib/api";
 import { SWR_REFRESH_MS } from "@/lib/swr-config";
+import Link from "next/link";
 import { ActionMenu } from "@/components/common/ActionMenu";
 import { useEditMode } from "@/hooks/useEditMode";
 import { restoreDraft, useAutosaveDraft } from "@/hooks/useAutosaveDraft";
@@ -1143,14 +1144,29 @@ const TaskRow = memo(function TaskRow({
             style={{ ...taskRowDotStyle, background: project.color }}
           />
         )}
-        <span
-          style={{
-            textDecoration: task.done ? "line-through" : "none",
-            color: task.done ? "var(--color-text-light)" : "var(--color-text)",
-          }}
-        >
-          {task.title}
-        </span>
+        {!isEdit && project ? (
+          // プレビューモードではタスクタイトルから /projects へジャンプ。
+          // 編集モードでは既存の input 編集を維持するため Link 化しない。
+          <Link
+            href={`/projects?open=${project.id}#project-${project.id}`}
+            className="dashboard-task-link"
+            style={{
+              textDecoration: task.done ? "line-through" : "none",
+              color: task.done ? "var(--color-text-light)" : "var(--color-text)",
+            }}
+          >
+            {task.title}
+          </Link>
+        ) : (
+          <span
+            style={{
+              textDecoration: task.done ? "line-through" : "none",
+              color: task.done ? "var(--color-text-light)" : "var(--color-text)",
+            }}
+          >
+            {task.title}
+          </span>
+        )}
       </div>
       {isEdit && (onMoveUp || onMoveDown || onShiftPrev || onShiftNext) && (
         <div className="edit-only" style={{ flexShrink: 0 }}>

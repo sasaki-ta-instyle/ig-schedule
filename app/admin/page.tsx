@@ -1,5 +1,5 @@
-import { AdminPanel } from "@/components/admin/AdminPanel";
+import { permanentRedirect } from "next/navigation";
 
 export default function AdminPage() {
-  return <AdminPanel />;
+  permanentRedirect("/projects?from=admin");
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { SearchFilterBar } from "@/components/common/SearchFilterBar";
 import { fetcher, postJson, del } from "@/lib/api";
 import { useEditMode } from "@/hooks/useEditMode";
@@ -27,10 +27,20 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 const DEFAULT_PAGE_SIZE: PageSize = 10;
 
 export function RecurringList() {
-  const { isEdit } = useEditMode();
+  const { isEdit, currentMemberId } = useEditMode();
   const [showArchived, setShowArchived] = useState(false);
   const [keyword, setKeyword] = useState<string>("");
   const [filterMember, setFilterMember] = useState<number | "all" | "unassigned">("all");
+
+  // 初回ハイドレーション: ログイン中メンバーが判明したらフィルタを自分にセットする。
+  // ユーザーが手動で一度でも変更したら以後は自動上書きしない（AdminPanel と同じ挙動）。
+  const filterAutoInitRef = useRef(false);
+  useEffect(() => {
+    if (filterAutoInitRef.current) return;
+    if (currentMemberId == null) return;
+    filterAutoInitRef.current = true;
+    setFilterMember(currentMemberId);
+  }, [currentMemberId]);
 
   const { data: members } = useSWR<Member[]>("/api/members", fetcher);
   const { data: items } = useSWR<RecurringTask[]>(RECURRING_KEY, fetcher);
