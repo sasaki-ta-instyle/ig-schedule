@@ -1616,12 +1616,6 @@ function ProjectCard({
               {showMetaSection && (
                 <div>
                   <div
-                    className="eyebrow"
-                    style={{ marginBottom: "var(--space-2)" }}
-                  >
-                    概要・メモ
-                  </div>
-                  <div
                     style={{
                       display: "flex",
                       flexDirection: "column",
