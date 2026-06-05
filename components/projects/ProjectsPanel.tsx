@@ -817,19 +817,34 @@ export function ProjectsPanel() {
     // 3. 展開（他は閉じて target だけ開く: 着地点の DOM 位置を安定させる）
     setExpanded(new Set([id]));
 
-    // 4. 80-120ms の「間」のあとスクロール + 灯り
-    const t1 = setTimeout(() => {
+    // 4. スクロール + 灯り。
+    // SP は描画が遅く、smooth スクロールはアニメ開始時点の y を目標に固定する
+    // ため、その後の遅延レイアウト（タスクリストの非同期描画など）で着地が
+    // ずれる。instant スクロールに変えて、rAF×2 でレイアウト確定を待ち、
+    // さらに 400ms 後にもう 1 回スクロールして async 描画後のズレも補正する。
+    const scrollToTarget = (): HTMLElement | null => {
       const el = document.getElementById(`project-${id}`);
-      if (!el) return;
-      el.dataset.justOpened = "true";
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      setLiveMessage(`${targetProject.name} に移動しました`);
-      const t2 = setTimeout(() => {
-        delete el.dataset.justOpened;
-      }, 1500);
-      (window as unknown as { __projectsArrivalTimer?: number }).__projectsArrivalTimer =
-        t2 as unknown as number;
-    }, 100);
+      if (!el) return null;
+      el.scrollIntoView({ behavior: "auto", block: "start" });
+      return el;
+    };
+
+    const t1 = setTimeout(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = scrollToTarget();
+          if (!el) return;
+          el.dataset.justOpened = "true";
+          setLiveMessage(`${targetProject.name} に移動しました`);
+          const t2 = setTimeout(() => {
+            delete el.dataset.justOpened;
+          }, 1500);
+          (window as unknown as { __projectsArrivalTimer?: number }).__projectsArrivalTimer =
+            t2 as unknown as number;
+        });
+      });
+    }, 60);
+    const t3 = setTimeout(scrollToTarget, 400);
 
     // 5. URL から ?open / ?from を消費（hash は維持）
     // router.replace は basePath を自動前置するため、すでに basePath を含む
@@ -840,7 +855,10 @@ export function ProjectsPanel() {
     url.searchParams.delete("from");
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 
-    return () => clearTimeout(t1);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t3);
+    };
   }, [openParam, projects, expandedHydrated, pageSize, router]);
 
   // ── DnD active info ──
