@@ -100,10 +100,6 @@ export function PasswordPrompt({
                   aria-checked={active}
                   className={`timeline-chip ${active ? "is-active" : ""}`}
                   onClick={() => setMemberId(m.id)}
-                  style={{
-                    background: active ? m.color : undefined,
-                    borderColor: active ? m.color : undefined,
-                  }}
                 >
                   <span
                     className="timeline-chip-dot"
