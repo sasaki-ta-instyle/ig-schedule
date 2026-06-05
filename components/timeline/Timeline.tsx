@@ -170,19 +170,17 @@ export function Timeline() {
       <header
         style={{
           display: "flex",
-          alignItems: "baseline",
+          alignItems: "flex-end",
           justifyContent: "space-between",
           gap: 16,
-          marginBottom: 20,
+          marginBottom: 16,
           flexWrap: "wrap",
         }}
       >
         <div>
-          <div className="eyebrow" style={{ marginBottom: 4 }}>
-            PROJECT TIMELINE
-          </div>
-          <h2 className="t-h3" style={{ fontWeight: 600 }}>
-            プロジェクトタイムライン
+          <span className="eyebrow">TIMELINE</span>
+          <h2 className="t-h3" style={{ marginTop: 4 }}>
+            タイムライン
           </h2>
         </div>
         <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>

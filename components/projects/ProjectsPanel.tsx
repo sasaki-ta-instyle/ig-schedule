@@ -847,8 +847,8 @@ export function ProjectsPanel() {
     const idx = projects.findIndex((p) => p.id === id);
     if (idx >= 0) setPage(Math.floor(idx / pageSize) + 1);
 
-    // 3. 展開
-    setExpanded((prev) => new Set([...prev, id]));
+    // 3. 展開（他は閉じて target だけ開く: 着地点の DOM 位置を安定させる）
+    setExpanded(new Set([id]));
 
     // 4. 80-120ms の「間」のあとスクロール + 灯り
     const t1 = setTimeout(() => {
@@ -865,10 +865,13 @@ export function ProjectsPanel() {
     }, 100);
 
     // 5. URL から ?open / ?from を消費（hash は維持）
+    // router.replace は basePath を自動前置するため、すでに basePath を含む
+    // window.location.pathname を渡すと二重前置になり 404 する。
+    // ここではナビゲートではなく URL バーの掃除だけが目的なので history API を直接使う。
     const url = new URL(window.location.href);
     url.searchParams.delete("open");
     url.searchParams.delete("from");
-    router.replace(url.pathname + url.search + url.hash, { scroll: false });
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 
     return () => clearTimeout(t1);
   }, [openParam, projects, expandedHydrated, pageSize, router]);
@@ -1394,6 +1397,8 @@ function ProjectCard({
         style={{
           display: "flex",
           alignItems: "center",
+          flexWrap: "wrap",
+          rowGap: 4,
           gap: "var(--space-2)",
           padding: "var(--space-2) var(--space-3)",
           minHeight: 44,
@@ -1419,8 +1424,9 @@ function ProjectCard({
             display: "flex",
             alignItems: "center",
             gap: "var(--space-2)",
-            flex: 1,
+            flex: "1 1 240px",
             minWidth: 0,
+            overflow: "hidden",
             border: 0,
             borderRadius: "var(--r-sm)",
             background: "transparent",
@@ -1520,12 +1526,14 @@ function ProjectCard({
 
         {/* 担当チップ集約（ヘッダ右端） */}
         <div
+          onClick={onToggleExpanded}
           style={{
             display: "flex",
             gap: 4,
             flexShrink: 0,
             flexWrap: "wrap",
             maxWidth: 240,
+            cursor: "pointer",
           }}
           aria-label="担当メンバー"
         >
@@ -1557,7 +1565,14 @@ function ProjectCard({
           )}
         </div>
 
-        <span style={{ fontSize: ".75rem", color: "var(--color-text-muted)" }}>
+        <span
+          onClick={onToggleExpanded}
+          style={{
+            fontSize: ".75rem",
+            color: "var(--color-text-muted)",
+            cursor: "pointer",
+          }}
+        >
           {isExpanded ? "閉じる ▴" : "開く ▾"}
         </span>
 
