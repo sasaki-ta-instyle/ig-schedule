@@ -1479,7 +1479,7 @@ function ProjectCard({
           )}
           {isEdit ? (
             <input
-              className="input editable-only"
+              className="input editable-only project-name"
               defaultValue={p.name}
               onBlur={(e) => {
                 const v = e.currentTarget.value.trim();
@@ -1490,7 +1490,7 @@ function ProjectCard({
             />
           ) : (
             <strong
-              className="t-h4"
+              className="t-h4 project-name"
               style={{
                 fontSize: "1rem",
                 overflow: "hidden",
@@ -1603,57 +1603,24 @@ function ProjectCard({
             >
               {showMetaSection && (
                 <div>
-                  <button
-                    type="button"
-                    onClick={onToggleMetaExpanded}
-                    aria-expanded={isMetaExpanded}
-                    className="project-header-btn"
+                  <div
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      width: "100%",
                       padding: "var(--space-1) var(--space-2)",
-                      border: 0,
-                      borderRadius: "var(--r-sm)",
-                      background: "transparent",
                       color: "var(--color-text-muted)",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      font: "inherit",
                       fontSize: ".75rem",
                       letterSpacing: ".04em",
                     }}
                   >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        display: "inline-flex",
-                        width: 14,
-                        height: 14,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: ".875rem",
-                        lineHeight: 1,
-                        transform: isMetaExpanded
-                          ? "rotate(0deg)"
-                          : "rotate(-90deg)",
-                        transition: "transform var(--ease-out)",
-                      }}
-                    >
-                      ▾
-                    </span>
                     概要・メモ
-                  </button>
-                  {isMetaExpanded && (
-                    <div
-                      style={{
-                        marginTop: "var(--space-2)",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "var(--space-2)",
-                      }}
-                    >
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "var(--space-2)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "var(--space-2)",
+                    }}
+                  >
                       {(isEdit || (p.summary && p.summary.trim())) && (
                         <div>
                           <label
@@ -1721,7 +1688,6 @@ function ProjectCard({
                         </div>
                       )}
                     </div>
-                  )}
                 </div>
               )}
 

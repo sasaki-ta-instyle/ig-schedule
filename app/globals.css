@@ -1164,6 +1164,22 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
     justify-content: flex-start;
   }
 
+  /* ── プロジェクトヘッダ: SP は名前を独立行に ──
+     PC では一行で ▾ + dot + name + chip + 期日 + count が並ぶが、SP では
+     name の幅が足りず ... 省略になっていた。SP のみ button 内で折り返し、
+     name は flex-basis: 100% で自分の行に落とす。 */
+  .project-card-header .project-header-btn {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    overflow: visible;
+  }
+  .project-card-header .project-name {
+    flex-basis: 100%;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
   /* ── 4-1. iOS auto-zoom 防止 + 最小タップ領域 ──
      iOS Safari/Chrome は input の font-size < 16px だとフォーカス時に
      強制 zoom が走る。狭幅時のみ 16px に押し上げて UX 破壊を回避。
