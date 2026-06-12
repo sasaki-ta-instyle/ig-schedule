@@ -10,12 +10,12 @@ import { members } from "./schema";
 // AdminMemberPasswordsModal 等 admin 限定 UI のために、初期状態で誰か 1 人は admin になっている必要がある。
 // 本番では誰を admin にするかは手動運用（M-6）。
 const SEED_MEMBERS = [
-  { name: "佐々木", color: "#15A03A", role: null, isAdmin: true },
-  { name: "田邉",   color: "#C8102E", role: null, isAdmin: false },
-  { name: "山田",   color: "#7C3AED", role: null, isAdmin: false },
-  { name: "中野",   color: "#E0A100", role: null, isAdmin: false },
-  { name: "柏木",   color: "#FF1493", role: null, isAdmin: false },
-  { name: "和田",   color: "#1A73E8", role: null, isAdmin: false },
+  { name: "佐々木", color: "#15A03A", role: "アートディレクション、マネージメント", isAdmin: true },
+  { name: "田邉",   color: "#C8102E", role: "EC運営、動画撮影、動画編集、PM", isAdmin: false },
+  { name: "山田",   color: "#7C3AED", role: "PR、SNS、デザイン、執筆、校閲・校正、編集、人事アシスタント", isAdmin: false },
+  { name: "中野",   color: "#E0A100", role: "EC運営、アシスタントディレクター、メンター", isAdmin: false },
+  { name: "柏木",   color: "#FF1493", role: "人事、労務、総務", isAdmin: false },
+  { name: "和田",   color: "#1A73E8", role: "コンサル", isAdmin: false },
 ];
 
 async function main() {
