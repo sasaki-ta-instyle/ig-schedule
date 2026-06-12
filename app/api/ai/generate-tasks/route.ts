@@ -165,7 +165,9 @@ export async function POST(req: Request) {
     response = await client.messages.create(
       {
         model,
-        max_tokens: 4096,
+        // 期間が長い（数十週）+ メンバーが複数の場合、4096 では tool_use の引数 JSON 生成中に
+        // max_tokens で打ち切られ、input={} の空応答になる。8192 に拡張して余裕を持たせる。
+        max_tokens: 8192,
         system: [
           {
             type: "text",
@@ -264,6 +266,18 @@ export async function POST(req: Request) {
     notes?: unknown;
     estimatedHours?: unknown;
   }>;
+
+  // max_tokens で打ち切られた場合は tool_use.input が空 or 不完全 JSON のことが多い。
+  // 空応答を黙って返すとフロントが「タスクが出てこない」状態になるので、明示エラーで返す。
+  if (response.stop_reason === "max_tokens" && rawArr.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "AI 応答が出力上限で打ち切られました。期間を短くするか、担当メンバー数を減らしてもう一度お試しください。",
+      },
+      { status: 502 },
+    );
+  }
 
   const memberIdSet = new Set(plannedMemberIds);
   const weekSet = new Set(weeks);
